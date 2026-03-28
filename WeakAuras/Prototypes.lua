@@ -2670,7 +2670,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -3499,7 +3499,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -4103,7 +4103,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -4581,7 +4581,7 @@ Private.event_prototypes = {
         name = "sourceUnit",
         display = L["Source Unit"],
         type = "unit",
-        test = "(sourceGUID or '') == (UnitGUID(%q) or '') and sourceGUID",
+        test = "((not issecretvalue or not issecretvalue((UnitGUID(%q)))) and sourceGUID == UnitGUID(%q) or false) and sourceGUID",
         values = "actual_unit_types_with_specific",
         enable = function(trigger)
           return not (trigger.subeventPrefix == "ENVIRONMENTAL")
@@ -4589,7 +4589,7 @@ Private.event_prototypes = {
         store = true,
         conditionType = "select",
         conditionTest = function(state, needle, op)
-          return state and state.show and ((state.sourceGUID or '') == (UnitGUID(needle) or '')) == (op == "==")
+          return state and state.show and ((not issecretvalue or not issecretvalue((UnitGUID(needle)))) and (state.sourceGUID == UnitGUID(needle))) == (op == "==")
         end
       },
       {
@@ -4720,7 +4720,7 @@ Private.event_prototypes = {
         name = "destUnit",
         display = L["Destination Unit"],
         type = "unit",
-        test = "(destGUID or '') == (UnitGUID(%q) or '') and destGUID",
+        test = "((not issecretvalue or not issecretvalue((UnitGUID(%q)))) and destGUID == UnitGUID(%q) or false) and destGUID",
         values = "actual_unit_types_with_specific",
         enable = function(trigger)
           return not (trigger.subeventPrefix == "SPELL" and trigger.subeventSuffix == "_CAST_START");
@@ -4728,7 +4728,7 @@ Private.event_prototypes = {
         store = true,
         conditionType = "select",
         conditionTest = function(state, needle, op)
-          return state and state.show and ((state.destGUID or '') == (UnitGUID(needle) or '')) == (op == "==")
+          return state and state.show and ((not issecretvalue or not issecretvalue((UnitGUID(needle)))) and (state.destGUID == UnitGUID(needle))) == (op == "==")
         end
       },
       {
@@ -9490,7 +9490,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -10008,7 +10008,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",

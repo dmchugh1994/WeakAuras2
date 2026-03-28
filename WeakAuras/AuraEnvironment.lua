@@ -24,7 +24,7 @@ if UnitAura == nil then
 	end
 end
 
--- Unit Aura functions that return info about the first Aura matching the spellName or spellID given on the unit.
+local issecretvalue = issecretvalue or function() return false end
 local WA_GetUnitAura = function(unit, spell, filter)
   if filter and not filter:upper():find("FUL") then
       filter = filter.."|HELPFUL"
@@ -32,8 +32,10 @@ local WA_GetUnitAura = function(unit, spell, filter)
   for i = 1, 255 do
     local name, _, _, _, _, _, _, _, _, spellId = UnitAura(unit, i, filter)
     if not name then return end
-    if spell == spellId or spell == name then
-      return UnitAura(unit, i, filter)
+    if not issecretvalue(name) then
+      if spell == spellId or spell == name then
+        return UnitAura(unit, i, filter)
+      end
     end
   end
 end

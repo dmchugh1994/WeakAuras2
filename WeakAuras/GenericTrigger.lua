@@ -83,19 +83,24 @@ local ConstructTest, ConstructFunction
 
 local nameplateExists = {}
 
+local issecretvalue = issecretvalue or function() return false end
+
 ---@param unit UnitToken
 ---@param smart? boolean
 ---@return boolean unitExists
 function WeakAuras.UnitExistsFixed(unit, smart)
+  local exists
   if #unit > 9 and unit:sub(1, 9) == "nameplate" then
-    return nameplateExists[unit]
+    exists = nameplateExists[unit]
+  elseif smart and IsInRaid() and (unit:sub(1, 5) == "party" or unit == "player" or unit == "pet") then
+    exists = false
+  else
+    exists = UnitExists(unit) or UnitGUID(unit)
   end
-  if smart and IsInRaid() then
-    if unit:sub(1, 5) == "party" or unit == "player" or unit == "pet" then
-      return false
-    end
+  if issecretvalue(exists) then
+    return true
   end
-  return UnitExists(unit) or UnitGUID(unit)
+  return exists
 end
 
 ---@param input string

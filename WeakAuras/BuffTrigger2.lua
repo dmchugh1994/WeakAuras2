@@ -87,6 +87,7 @@ local pairs, next, type = pairs, next, type
 local UnitAura = UnitAura
 
 local newAPI = WeakAuras.IsRetail()
+local issecretvalue = issecretvalue or function() return false end
 
 ---@class WeakAuras
 local WeakAuras = WeakAuras
@@ -149,10 +150,16 @@ local unitVisible = {}
 -- Work around a issue where UnitExists returns true for nameplates even
 -- if the nameplate doesn't exist anymore
 local function UnitExistsFixed(unit)
+  local exists
   if #unit > 9 and unit:sub(1, 9) == "nameplate" then
-    return nameplateExists[unit] or false
+    exists = nameplateExists[unit] or false
+  else
+    exists = UnitExists(unit) and UnitGUID(unit) or false
   end
-  return UnitExists(unit) and UnitGUID(unit) or false
+  if issecretvalue(exists) then
+    return true
+  end
+  return exists
 end
 
 local function UnitIsVisibleFixed(unit)
@@ -1447,7 +1454,7 @@ local function TriggerInfoApplies(triggerInfo, unit)
     return false
   end
 
-  if triggerInfo.npcId and not triggerInfo.npcId:Check(select(6, strsplit('-', UnitGUID(unit) or ''))) then
+  if triggerInfo.npcId and not triggerInfo.npcId:Check(select(6, strsplit('-', not issecretvalue((UnitGUID(unit))) and UnitGUID(unit) or ''))) then
     return false
   end
 
@@ -1771,7 +1778,7 @@ do
   local _time, _unit, _filter
 
   local function HandleAura(aura)
-    if (not aura or not aura.name) then
+    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
       return
     end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
@@ -1892,7 +1899,7 @@ do
   local _matchDataChanged, _time, _unit, _filter, _scanFuncNameGroup, _scanFuncSpellIdGroup, _scanFuncGeneralGroup, _scanFuncName, _scanFuncSpellId, _scanFuncGeneral
 
   local function HandleAura(aura)
-    if (not aura or not aura.name) then
+    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
       return
     end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
@@ -1929,8 +1936,10 @@ do
           -- incremental
           if unitAuraUpdateInfo.addedAuras ~= nil then
             for _, aura in ipairs(unitAuraUpdateInfo.addedAuras) do
-              if (aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL") then
-                HandleAura(aura)
+              if type(aura.name) == "string" and not issecretvalue(aura.name) and type(aura.spellId) == "number" then
+                if (aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL") then
+                  HandleAura(aura)
+                end
               end
             end
           end
@@ -1938,8 +1947,10 @@ do
           if unitAuraUpdateInfo.updatedAuraInstanceIDs ~= nil then
             for _, auraInstanceID in ipairs(unitAuraUpdateInfo.updatedAuraInstanceIDs) do
               local aura = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, auraInstanceID)
-              if aura and ((aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL")) then
-                HandleAura(aura)
+              if aura and type(aura.name) == "string" and not issecretvalue(aura.name) and type(aura.spellId) == "number" then
+                if (aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL") then
+                  HandleAura(aura)
+                end
               end
             end
           end
@@ -4100,7 +4111,7 @@ local AugmentMatchDataMulti
 do
   local _matchData, _unit, _sourceGUID, _nameKey, _spellKey
   local function HandleAura(aura)
-    if (not aura or not aura.name) then
+    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
       return
     end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
@@ -4207,7 +4218,7 @@ local CheckAurasMulti
 do
   local _base, _unit
   local function HandleAura(aura)
-    if (not aura or not aura.name) then
+    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
       return
     end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
