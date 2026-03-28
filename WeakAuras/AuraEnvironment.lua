@@ -200,6 +200,8 @@ local blockedFunctions = {
   GetEditBoxMetatable = true,
   GetFontStringMetatable = true,
   GetFrameMetatable = true,
+  -- Midnight: Block combat log access in custom code
+  CombatLogGetCurrentEventInfo = WeakAuras.IsMidnight() or nil,
 }
 
 local blockedTables = {

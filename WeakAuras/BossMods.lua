@@ -1483,6 +1483,10 @@ else
   ActiveBossModText = L["No active boss mod addon detected.\n\nNote: This trigger will use BigWigs or DBM, in that order if both are installed."]
 end
 
+-- Midnight: Skip generic boss mod prototype registration since boss mods
+-- rely on combat log data that is unavailable in instances
+if not WeakAuras.IsMidnight() then
+
 Private.event_prototypes["Boss Mod Stage"] = {
   type = "addons",
   events = {},
@@ -1892,4 +1896,5 @@ Private.event_prototypes["Boss Mod Timer"] = {
 }
 Private.category_event_prototype.addons["Boss Mod Timer"] = L["Boss Mod Timer"]
 
+end -- not WeakAuras.IsMidnight()
 

@@ -221,6 +221,15 @@ local Comm = LibStub:GetLibrary("AceComm-3.0")
 local Chomp = LibStub:GetLibrary("Chomp")
 -- the biggest bottleneck by far is in transmission and printing; so use maximal compression
 local configForDeflate = {level = 9}
+
+-- Midnight: Addon communication is restricted inside instanced content
+local function IsCommRestricted()
+  if not WeakAuras.IsMidnight() then return false end
+  local _, instanceType = IsInInstance()
+  return instanceType == "party" or instanceType == "raid"
+    or instanceType == "pvp" or instanceType == "arena"
+end
+
 local configForLS = {
   errorOnUnserializableType =  false
 }
@@ -620,10 +629,12 @@ function RequestDisplay(characterName, displayName)
     v = version
   };
   local transmitString = TableToString(transmit);
+  if IsCommRestricted() then return end
   Comm:SendCommMessage("WeakAuras", transmitString, "WHISPER", characterName);
 end
 
 function TransmitError(errorMsg, characterName)
+  if IsCommRestricted() then return end
   local transmit = {
     m = "dE",
     eM = errorMsg
@@ -632,6 +643,10 @@ function TransmitError(errorMsg, characterName)
 end
 
 function TransmitDisplay(id, characterName, version)
+  if IsCommRestricted() then
+    TransmitError("restricted", characterName)
+    return
+  end
   local encoded = Private.DisplayToString(id);
   if(encoded ~= "") then
     if version == 2  then

@@ -411,7 +411,7 @@ WeakAuras.buildType = "pr"
 
 --@debug@
 if versionStringFromToc == "@project-version@" then
-  versionStringFromToc = "Dev"
+  versionStringFromToc = ""
   buildTime = "Dev"
   WeakAuras.buildType = "dev"
 end
@@ -570,7 +570,7 @@ end
 
 ---@param ... string
 WeakAuras.prettyPrint = function(...)
-  print("|cff9900ffWeakAuras:|r ", ...)
+  print("|cff9900ffLlama Auras:|r ", ...)
 end
 
 -- Force enable WeakAurasCompanion and Archive because some addon managers interfere with it
@@ -661,15 +661,6 @@ end
 if WeakAuras.IsWrathClassic() then
   C_Timer.After(1, function()
     WeakAuras.prettyPrint("This version of WeakAuras is provided as is. We are unable to test it ourselves on CN Servers.")
-  end)
-elseif WeakAuras.IsMidnight() then
-  C_Timer.After(1, function()
-    WeakAuras.prettyPrint("WeakAuras does not support Midnight due to Blizzard restricting addons. Read more at https://patreon.com/WeakAuras")
-  end)
-  libsAreOk = false
-elseif WeakAuras.IsTWW() then
-  C_Timer.After(1, function()
-    WeakAuras.prettyPrint("WeakAuras does not support Midnight due to Blizzard's new addon restrictions. Read more at https://patreon.com/WeakAuras")
   end)
 end
 

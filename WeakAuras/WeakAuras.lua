@@ -166,7 +166,11 @@ function Private.LoadOptions(msg)
 end
 
 function WeakAuras.OpenOptions(msg)
-  if Private.NeedToRepairDatabase() then
+  if not WeakAuras.IsLibsOK() then
+    prettyPrint("WeakAuras libraries are not loaded. Please ensure all dependencies are installed.");
+    return;
+  end
+  if Private.NeedToRepairDatabase and Private.NeedToRepairDatabase() then
     StaticPopup_Show("WEAKAURAS_CONFIRM_REPAIR", nil, nil, {reason = "downgrade"})
   elseif (WeakAuras.IsLoginFinished() and Private.LoadOptions(msg)) then
     WeakAuras.ToggleOptions(msg, Private);
@@ -175,16 +179,16 @@ end
 
 function Private.PrintHelp()
   print(L["Usage:"])
-  print(L["/wa help - Show this message"])
-  print(L["/wa minimap - Toggle the minimap icon"])
-  print(L["/wa pstart - Start profiling. Optionally include a duration in seconds after which profiling automatically stops. To profile the next combat/encounter, pass a \"combat\" or \"encounter\" argument."])
-  print(L["/wa pstop - Finish profiling"])
-  print(L["/wa pprint - Show the results from the most recent profiling"])
-  print(L["/wa repair - Repair tool"])
+  print(L["/llama help - Show this message"])
+  print(L["/llama minimap - Toggle the minimap icon"])
+  print(L["/llama pstart - Start profiling. Optionally include a duration in seconds after which profiling automatically stops. To profile the next combat/encounter, pass a \"combat\" or \"encounter\" argument."])
+  print(L["/llama pstop - Finish profiling"])
+  print(L["/llama pprint - Show the results from the most recent profiling"])
+  print(L["/llama repair - Repair tool"])
   print(L["If you require additional assistance, please open a ticket on GitHub or visit our Discord at https://discord.gg/weakauras!"])
 end
 
-SLASH_WEAKAURAS1, SLASH_WEAKAURAS2 = "/weakauras", "/wa";
+SLASH_WEAKAURAS1, SLASH_WEAKAURAS2 = "/weakauras", "/llama";
 function SlashCmdList.WEAKAURAS(input)
   local args, msg = {}, nil
 
@@ -219,7 +223,7 @@ function SlashCmdList.WEAKAURAS(input)
       for _, feature in ipairs(features) do
         table.insert(summary, ("|c%s%s|r"):format(feature.enabled and "ff00ff00" or "ffff0000", feature.id))
       end
-      prettyPrint(L["Syntax /wa feature <toggle|on|enable|disable|off> <feature>"])
+      prettyPrint(L["Syntax /llama feature <toggle|on|enable|disable|off> <feature>"])
       prettyPrint(L["Available features: %s"]:format(table.concat(summary, ", ")))
     else
       local action = ({
@@ -263,7 +267,7 @@ function WeakAuras.ToggleMinimap()
   WeakAurasSaved.minimap.hide = not WeakAurasSaved.minimap.hide
   if WeakAurasSaved.minimap.hide then
     LDBIcon:Hide("WeakAuras");
-    prettyPrint(L["Use /wa minimap to show the minimap icon again."])
+    prettyPrint(L["Use /llama minimap to show the minimap icon again."])
   else
     LDBIcon:Show("WeakAuras");
   end
@@ -1221,9 +1225,10 @@ do -- Archive stuff
           error(string.format(L["Could not load WeakAuras Archive, the addon is %s"], reason))
         end
       end
-      if type(WeakAurasArchive) ~= "table" then
-        WeakAurasArchive = {}
+      if type(LlamaAurasArchive) ~= "table" then
+        LlamaAurasArchive = {}
       end
+      WeakAurasArchive = LlamaAurasArchive
       Archivist:Initialize(WeakAurasArchive)
     end
     return Archivist
@@ -1357,7 +1362,8 @@ loadedFrame:SetScript("OnEvent", function(self, event, ...)
   if(event == "ADDON_LOADED") then
     if(... == ADDON_NAME) then
       ---@type WeakAurasSaved
-      WeakAurasSaved = WeakAurasSaved or {};
+      LlamaAurasSaved = LlamaAurasSaved or {};
+      WeakAurasSaved = LlamaAurasSaved;
       db = WeakAurasSaved;
       Private.db = db
       -- Defines the action squelch period after login
@@ -3566,6 +3572,16 @@ function Private.ReleaseClone(id, cloneId, regionType)
 end
 
 function Private.HandleChatAction(message_type, message, message_dest, message_dest_isunit, message_channel, r, g, b, region, customCache, when, formatters)
+  -- Midnight: Suppress SendChatMessage-based actions inside instances
+  -- Local displays (PRINT, TTS, ERROR, COMBAT) are still allowed
+  if WeakAuras.IsMidnight() and message_type ~= "PRINT" and message_type ~= "TTS"
+    and message_type ~= "ERROR" and message_type ~= "COMBAT" then
+    local _, instanceType = IsInInstance()
+    if instanceType == "party" or instanceType == "raid"
+      or instanceType == "pvp" or instanceType == "arena" then
+      return
+    end
+  end
   local useHiddenStates = when == "finish"
   if (message:find('%%')) then
     message = Private.ReplacePlaceHolders(message, region, customCache, useHiddenStates, formatters);

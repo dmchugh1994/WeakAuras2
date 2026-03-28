@@ -12402,6 +12402,33 @@ if WeakAuras.IsRetail() then
   Private.event_prototypes["Queued Action"] = nil
 end
 
+-- Midnight: Disable combat-dependent triggers due to Blizzard API restrictions
+-- Combat Log events, health/power tracking on non-player units, swing timers,
+-- and other combat-specific systems are no longer accessible to addons in instances.
+if WeakAuras.IsMidnight() then
+  -- Combat Log category — CLEU entirely unavailable in instances
+  Private.event_prototypes["Combat Log"] = nil
+  -- Combat-dependent unit triggers — Secret Values on non-player units
+  Private.event_prototypes["Health"] = nil
+  Private.event_prototypes["Power"] = nil
+  Private.event_prototypes["Alternate Power"] = nil
+  if Private.event_prototypes["Threat Situation"] then
+    Private.event_prototypes["Threat Situation"] = nil
+  end
+  -- Combat-dependent spell triggers
+  Private.event_prototypes["Swing Timer"] = nil
+  Private.event_prototypes["Spell Activation Overlay"] = nil
+  if Private.event_prototypes["Assisted Combat Next Cast"] then
+    Private.event_prototypes["Assisted Combat Next Cast"] = nil
+  end
+  -- Combat event triggers
+  Private.event_prototypes["Combat Events"] = nil
+  -- GTFO depends on combat log
+  Private.event_prototypes["GTFO"] = nil
+  -- Remove combatlog category from the category list
+  Private.event_categories["combatlog"] = nil
+end
+
 Private.category_event_prototype = {}
 for name, prototype in pairs(Private.event_prototypes) do
   Private.category_event_prototype[prototype.type] = Private.category_event_prototype[prototype.type] or {}

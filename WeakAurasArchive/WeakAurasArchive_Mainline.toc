@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: Llama Auras Archive
+## Author: The WeakAuras Team
+## Version: @project-version@
+## IconTexture: Interface\AddOns\WeakAuras\Media\Textures\icon.blp
+## LoadOnDemand: 1
+## SavedVariables: LlamaAurasArchive
+## Dependencies: WeakAuras
+## AllowLoadGameType: mainline

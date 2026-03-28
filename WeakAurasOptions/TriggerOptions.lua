@@ -303,9 +303,9 @@ function OptionsPrivate.GetTriggerTitle(data, triggernum)
       elseif triggerType == "custom" then
         name = L["Custom"]
       else
-        name = event_prototype.name
+        name = event_prototype and event_prototype.name or L["Unknown"]
       end
-      return L["Trigger %i: %s"]:format(triggernum, name)
+      return L["Trigger %i: %s"]:format(triggernum, name or L["Unknown"])
     end
   end
   return L["Trigger %i"]:format(triggernum)

@@ -194,7 +194,8 @@ loadedFrame:SetScript("OnEvent", function(self, event, addon)
   if (event == "ADDON_LOADED") then
     if(addon == ADDON_NAME) then
       db = WeakAurasSaved;
-      WeakAurasOptionsSaved = WeakAurasOptionsSaved or {};
+      LlamaAurasOptionsSaved = LlamaAurasOptionsSaved or {};
+      WeakAurasOptionsSaved = LlamaAurasOptionsSaved;
 
       odb = WeakAurasOptionsSaved;
 

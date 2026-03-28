@@ -54,8 +54,8 @@ if WeakAuras.IsRetail() then
   local LibDispell = LibStub("LibDispel-1.0")
   FixDebuffClass = function(debuffClass, spellId)
     if debuffClass == nil then
-      local bleedList = LibDispell:GetBleedList()
-      if bleedList[spellId] then
+      local bleedList = LibDispell.GetBleedList and LibDispell:GetBleedList()
+      if bleedList and bleedList[spellId] then
         debuffClass = "bleed"
       else
         debuffClass = "none"
@@ -4294,7 +4294,9 @@ end
 function BuffTrigger.InitMultiAura()
   if not multiAuraFrame then
     multiAuraFrame = CreateFrame("Frame")
-    multiAuraFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    if not WeakAuras.IsMidnight() then
+      multiAuraFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    end
     multiAuraFrame:RegisterEvent("UNIT_TARGET")
     multiAuraFrame:RegisterEvent("UNIT_AURA")
     multiAuraFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
@@ -4315,6 +4317,10 @@ function BuffTrigger.HandleMultiEvent(frame, event, ...)
   local system = "bufftrigger2 - multi - " .. event
   Private.StartProfileSystem(system)
   if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+    if WeakAuras.IsMidnight() then
+      Private.StopProfileSystem(system)
+      return
+    end
     CombatLog(CombatLogGetCurrentEventInfo())
   elseif event == "UNIT_TARGET" then
     TrackUid(...)

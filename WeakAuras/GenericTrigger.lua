@@ -885,6 +885,10 @@ function Private.ScanEvents(event, arg1, arg2, ...)
     return
   end
   if(event == "COMBAT_LOG_EVENT_UNFILTERED") then
+    if WeakAuras.IsMidnight() then
+      Private.StopProfileSystem("generictrigger " .. system)
+      return
+    end
     local arg1, arg2 = CombatLogGetCurrentEventInfo();
 
     event_list = event_list[arg2];
@@ -1124,7 +1128,7 @@ local function AddFakeInformation(data, triggernum, state, eventData)
     state.expirationTime = GetTime() + 7
     state.duration = 7
   end
-  if eventData.prototype and eventData.prototype.GetNameAndIcon then
+  if eventData and eventData.prototype and eventData.prototype.GetNameAndIcon then
     local name, icon = eventData.prototype.GetNameAndIcon(eventData.trigger)
     if state.name == nil then
       state.name = name
@@ -1138,10 +1142,19 @@ end
 ---@type fun(id: auraId, triggernum: integer)
 function GenericTrigger.CreateFakeStates(id, triggernum)
   local data = WeakAuras.GetData(id)
-  local eventData = events[id][triggernum]
+  local eventData = events[id] and events[id][triggernum]
 
   Private.ActivateAuraEnvironment(id);
   local allStates = WeakAuras.GetTriggerStateForTrigger(id, triggernum);
+
+  if not eventData then
+    local state = {}
+    GenericTrigger.CreateFallbackState(data, triggernum, state)
+    allStates[""] = state
+    AddFakeInformation(data, triggernum, state, nil)
+    Private.ActivateAuraEnvironment(nil);
+    return
+  end
 
   local arg1
   if eventData.statesParameter == "unit" then
@@ -1669,7 +1682,9 @@ function GenericTrigger.Add(data, region)
             if(event_prototypes["Health"]) then
               trigger.event = "Health";
             else
-              error("Improper arguments to WeakAuras.Add - no event prototype can be found for event type \""..trigger.event.."\" and default prototype reset failed.");
+              WeakAuras.prettyPrint("Aura '" .. (data.id or "Unknown") .. "' uses an invalid event type '" .. tostring(trigger.event) .. "'. It has been disabled to prevent errors.")
+              Private.AuraWarnings.UpdateWarning(data.uid, "InvalidEvent", "error", "Invalid event type '" .. tostring(trigger.event) .. "'.")
+              return
             end
           else
             if (trigger.event == "Combat Log") then
@@ -2220,7 +2235,9 @@ do
   function WeakAuras.InitSwingTimer()
     if not(swingTimerFrame) then
       swingTimerFrame = CreateFrame("Frame");
-      swingTimerFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
+      if not WeakAuras.IsMidnight() then
+        swingTimerFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
+      end
       swingTimerFrame:RegisterEvent("PLAYER_ENTER_COMBAT");
       swingTimerFrame:RegisterEvent("PLAYER_LEAVE_COMBAT");
       swingTimerFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED");
@@ -5063,10 +5080,20 @@ end
 function GenericTrigger.CreateFallbackState(data, triggernum, state)
   state.show = true;
   state.changed = true;
-  local event = events[data.id][triggernum];
+  local event = events[data.id] and events[data.id][triggernum];
 
   Private.ActivateAuraEnvironment(data.id, "", state);
   local trigger = data.triggers[triggernum].trigger
+
+  if not event then
+    state.progressType = "timed";
+    state.duration = 0;
+    state.expirationTime = math.huge;
+    state.value = nil;
+    state.total = nil;
+    Private.ActivateAuraEnvironment(nil);
+    return
+  end
 
   if event.GetNameAndIcon then
     local ok, name, icon = xpcall(event.GetNameAndIcon, Private.GetErrorHandlerUid(data.uid, L["GetNameAndIcon Function (fallback state)"]), trigger);
