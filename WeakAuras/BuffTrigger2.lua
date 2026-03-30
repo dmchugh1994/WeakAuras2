@@ -1392,17 +1392,26 @@ local function TriggerInfoApplies(triggerInfo, unit)
     return false
   end
 
-  if triggerInfo.groupRole and not triggerInfo.groupRole[UnitGroupRolesAssigned(controllingUnit) or ""] then
-    return false
+  if triggerInfo.groupRole then
+    local role = UnitGroupRolesAssigned(controllingUnit)
+    if issecretvalue(role) then role = nil end
+    if not triggerInfo.groupRole[role or ""] then
+      return false
+    end
   end
 
-  if triggerInfo.raidRole and not triggerInfo.raidRole[WeakAuras.UnitRaidRole(controllingUnit) or ""] then
-    return false
+  if triggerInfo.raidRole then
+    local rRole = WeakAuras.UnitRaidRole(controllingUnit)
+    if issecretvalue(rRole) then rRole = nil end
+    if not triggerInfo.raidRole[rRole or ""] then
+      return false
+    end
   end
 
   if triggerInfo.specId then
     local spec = Private.LibSpecWrapper.SpecForUnit(controllingUnit)
-    if not triggerInfo.specId[spec] then
+    if issecretvalue(spec) then spec = nil end
+    if not triggerInfo.specId[spec or ""] then
       return false
     end
   end
@@ -1410,7 +1419,9 @@ local function TriggerInfoApplies(triggerInfo, unit)
   if triggerInfo.arenaSpec and unit:sub(1, 5) == "arena" then
     -- GetArenaOpponentSpec doesn't use unit ids!
     local i = tonumber(unit:sub(6))
-    if not triggerInfo.arenaSpec[GetArenaOpponentSpec(i)] then
+    local arenaSpec = GetArenaOpponentSpec(i)
+    if issecretvalue(arenaSpec) then arenaSpec = nil end
+    if not triggerInfo.arenaSpec[arenaSpec or ""] then
       return false
     end
   end
@@ -1450,8 +1461,12 @@ local function TriggerInfoApplies(triggerInfo, unit)
     return false
   end
 
-  if triggerInfo.class and not triggerInfo.class[select(2, UnitClass(controllingUnit))] then
-    return false
+  if triggerInfo.class then
+    local classStr = select(2, UnitClass(controllingUnit))
+    if issecretvalue(classStr) then classStr = nil end
+    if not triggerInfo.class[classStr or ""] then
+      return false
+    end
   end
 
   if triggerInfo.npcId and not triggerInfo.npcId:Check(select(6, strsplit('-', not issecretvalue((UnitGUID(unit))) and UnitGUID(unit) or ''))) then
@@ -1778,11 +1793,21 @@ do
   local _time, _unit, _filter
 
   local function HandleAura(aura)
-    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
+    if not aura or (type(aura.name) ~= "string" and not issecretvalue(aura.name)) or type(aura.spellId) ~= "number" then
       return
     end
+    local name = aura.name
+    local rescued = (type(name) ~= "string" and not issecretvalue(name)) or (type(aura.spellId) == "number" and not issecretvalue(aura.spellId))
+    if issecretvalue(name) or type(name) ~= "string" then
+      WeakAuras.LogSecretAuraSkip(_unit, aura, rescued)
+      if rescued then
+        name = L["Private Aura"]
+      else
+        return
+      end
+    end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
-    UpdateMatchData(_time, matchDataChanged, _unit, nil, aura.auraInstanceID, _filter, aura.name, aura.icon, aura.applications, debuffClass, aura.duration, aura.expirationTime, aura.sourceUnit, aura.isStealable, aura.isBossAura, aura.isFromPlayerOrPlayerPet, aura.spellId, aura.timeMod, aura.points)
+    UpdateMatchData(_time, matchDataChanged, _unit, nil, aura.auraInstanceID, _filter, name, aura.icon, aura.applications, debuffClass, aura.duration, aura.expirationTime, aura.sourceUnit, aura.isStealable, aura.isBossAura, aura.isFromPlayerOrPlayerPet, aura.spellId, aura.timeMod, aura.points)
   end
 
   PrepareMatchData = function(unit, filter)
@@ -1899,12 +1924,21 @@ do
   local _matchDataChanged, _time, _unit, _filter, _scanFuncNameGroup, _scanFuncSpellIdGroup, _scanFuncGeneralGroup, _scanFuncName, _scanFuncSpellId, _scanFuncGeneral
 
   local function HandleAura(aura)
-    if not aura or type(aura.name) ~= "string" or issecretvalue(aura.name) or type(aura.spellId) ~= "number" then
+    if not aura or (type(aura.name) ~= "string" and not issecretvalue(aura.name)) or type(aura.spellId) ~= "number" then
       return
     end
+    local name = aura.name
+    local rescued = (type(name) ~= "string" and not issecretvalue(name)) or (type(aura.spellId) == "number" and not issecretvalue(aura.spellId))
+    if issecretvalue(name) or type(name) ~= "string" then
+      WeakAuras.LogSecretAuraSkip(_unit, aura, rescued)
+      if rescued then
+        name = L["Private Aura"]
+      else
+        return
+      end
+    end
     local debuffClass = FixDebuffClass(aura.dispelName, aura.spellId)
-
-    local name, spellId, auraInstanceID = aura.name, aura.spellId, aura.auraInstanceID
+    local spellId, auraInstanceID = aura.spellId, aura.auraInstanceID
     local updatedMatchData = UpdateMatchData(_time, _matchDataChanged, _unit, nil, auraInstanceID, _filter, name, aura.icon, aura.applications, debuffClass, aura.duration, aura.expirationTime, aura.sourceUnit, aura.isStealable, aura.isBossAura, aura.isFromPlayerOrPlayerPet, spellId, aura.timeMod, aura.points)
 
     if updatedMatchData then -- Aura data changed, check against triggerInfos
@@ -1936,9 +1970,15 @@ do
           -- incremental
           if unitAuraUpdateInfo.addedAuras ~= nil then
             for _, aura in ipairs(unitAuraUpdateInfo.addedAuras) do
-              if type(aura.name) == "string" and not issecretvalue(aura.name) and type(aura.spellId) == "number" then
-                if (aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL") then
-                  HandleAura(aura)
+              if type(aura.name) == "string" or issecretvalue(aura.name) then
+                if type(aura.spellId) == "number" then
+                  local isHelpful = aura.isHelpful
+                  local isHarmful = aura.isHarmful
+                  if issecretvalue(isHelpful) then isHelpful = (filter == "HELPFUL") end
+                  if issecretvalue(isHarmful) then isHarmful = (filter == "HARMFUL") end
+                  if (isHelpful and filter == "HELPFUL") or (isHarmful and filter == "HARMFUL") then
+                    HandleAura(aura)
+                  end
                 end
               end
             end
@@ -1947,9 +1987,15 @@ do
           if unitAuraUpdateInfo.updatedAuraInstanceIDs ~= nil then
             for _, auraInstanceID in ipairs(unitAuraUpdateInfo.updatedAuraInstanceIDs) do
               local aura = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, auraInstanceID)
-              if aura and type(aura.name) == "string" and not issecretvalue(aura.name) and type(aura.spellId) == "number" then
-                if (aura.isHelpful and filter == "HELPFUL") or (aura.isHarmful and filter == "HARMFUL") then
-                  HandleAura(aura)
+              if aura and (type(aura.name) == "string" or issecretvalue(aura.name)) then
+                if type(aura.spellId) == "number" then
+                  local isHelpful = aura.isHelpful
+                  local isHarmful = aura.isHarmful
+                  if issecretvalue(isHelpful) then isHelpful = (filter == "HELPFUL") end
+                  if issecretvalue(isHarmful) then isHarmful = (filter == "HARMFUL") end
+                  if (isHelpful and filter == "HELPFUL") or (isHarmful and filter == "HARMFUL") then
+                    HandleAura(aura)
+                  end
                 end
               end
             end

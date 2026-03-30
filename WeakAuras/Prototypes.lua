@@ -948,13 +948,13 @@ function Private.ExecEnv.ParseStringCheck(input)
       return false
     end,
     CheckBoth = function(self, e)
-      return self.entries[e] and not self.negativeEntries[e]
+      return e ~= nil and self.entries[e] and not self.negativeEntries[e]
     end,
     CheckPositive = function(self, e)
-      return self.entries[e]
+      return e ~= nil and self.entries[e]
     end,
     CheckNegative = function(self, e)
-      return not self.negativeEntries[e]
+      return e == nil or not self.negativeEntries[e]
     end,
     Add = function(self, e, negate)
       if negate then

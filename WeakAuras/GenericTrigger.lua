@@ -3716,6 +3716,9 @@ function WeakAuras.WatchUnitChange(unit)
       local oldUnitExists = watchUnitChange.unitExists[unitA]
       local oldGUID = watchUnitChange.unitIdToGUID[unitA]
       local newGUID = WeakAuras.UnitExistsFixed(unitA) and UnitGUID(unitA)
+      if issecretvalue(newGUID) then
+        newGUID = "secret-" .. unitA
+      end
       local unitExists = UnitExists(unitA) -- UnitExistsFixed check both UnitExists and UnitGUID, but in edge cases we are interested in UnitExists
       if oldGUID ~= newGUID or oldUnitExists ~= unitExists then
         eventsToSend["UNIT_CHANGED_" .. unitA] = unitA
@@ -3917,8 +3920,15 @@ function WeakAuras.WatchUnitChange(unit)
     return
   end
   local guid = UnitGUID(unit)
+  if issecretvalue(guid) then
+    guid = "secret-" .. unit
+  end
   watchUnitChange.trackedUnits[unit] = true
-  watchUnitChange.unitIdToGUID[unit] = WeakAuras.UnitExistsFixed(unit) and UnitGUID(unit)
+  local newGUID = WeakAuras.UnitExistsFixed(unit) and UnitGUID(unit)
+  if issecretvalue(newGUID) then
+    newGUID = "secret-" .. unit
+  end
+  watchUnitChange.unitIdToGUID[unit] = newGUID
   watchUnitChange.unitExists[unit] = UnitExists(unit)
 
   if guid then

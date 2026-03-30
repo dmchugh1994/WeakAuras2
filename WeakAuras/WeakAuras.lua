@@ -99,6 +99,10 @@ function WeakAuras.InternalVersion()
   return internalVersion;
 end
 
+---@class WeakAurasSaved
+local db;
+local issecretvalue = issecretvalue or function() return false end
+
 do
   local currentErrorHandlerId
   local currentErrorHandlerUid
@@ -185,6 +189,7 @@ function Private.PrintHelp()
   print(L["/llama pstop - Finish profiling"])
   print(L["/llama pprint - Show the results from the most recent profiling"])
   print(L["/llama repair - Repair tool"])
+  print(L["/llama secretdebug - Toggle detailed logging for restricted (Private) auras"])
   print(L["If you require additional assistance, please open a ticket on GitHub or visit our Discord at https://discord.gg/weakauras!"])
 end
 
@@ -256,10 +261,41 @@ function SlashCmdList.WEAKAURAS(input)
         end
       end
     end
+  elseif msg == "secretdebug" then
+    db.secretDebug = not db.secretDebug
+    WeakAuras.prettyPrint(L["Secret Aura Debugging: %s"]:format(db.secretDebug and L["Enabled"] or L["Disabled"]))
+    if db.secretDebug then
+      WeakAuras.ClearSecretWarnings()
+    end
   else
     WeakAuras.OpenOptions(msg);
   end
 end
+
+local secretWarningsShown = {}
+function WeakAuras.LogSecretAuraSkip(unit, aura, rescued)
+  if not aura or not issecretvalue(aura.name) then return end
+
+  if db.secretDebug then
+    local status = rescued and L["(Rescued via Spell ID)"] or L["(Dropped)"]
+    WeakAuras.prettyPrint(L["Private Aura on %s %s: (AuraInstanceID: %s, SpellID: %s)"]:format(unit, status, tostring(aura.auraInstanceID or "N/A"), tostring(aura.spellId or "N/A")))
+  elseif not secretWarningsShown[unit] then
+    secretWarningsShown[unit] = true
+    if rescued then
+      WeakAuras.prettyPrint(L["Some auras on %s have restricted names (Private Auras), but they are available via Spell ID."]:format(unit))
+    else
+      WeakAuras.prettyPrint(L["Some auras on %s are restricted (Private Auras) and cannot be tracked by WeakAuras in this instance."]:format(unit))
+    end
+    WeakAuras.prettyPrint(L["Use '/llama secretdebug' to see detailed logs of restricted auras."])
+  end
+end
+
+function WeakAuras.ClearSecretWarnings()
+  wipe(secretWarningsShown)
+end
+
+Private.callbacks:RegisterCallback("ENCOUNTER_START", WeakAuras.ClearSecretWarnings)
+Private.callbacks:RegisterCallback("ZONE_CHANGED_NEW_AREA", WeakAuras.ClearSecretWarnings)
 
 if not WeakAuras.IsLibsOK() then return end
 
@@ -282,9 +318,6 @@ BINDING_NAME_WEAKAURASPRINTPROFILING = L["Print Profiling Results"]
 -- Noteable properties:
 --  debug: If set to true, WeakAura.debug() outputs messages to the chat frame
 --  displays: All aura settings, keyed on their id
-
----@class WeakAurasSaved
-local db;
 
 -- While true no events are handled. E.g. WeakAuras is paused while the Options dialog is open
 local paused = true;
@@ -327,6 +360,7 @@ local subRegionTypes = Private.subRegionTypes
 Private.regionOptions = {};
 local regionOptions = Private.regionOptions;
 
+Private.subRegionOptions = {}
 Private.subRegionOptions = {}
 local subRegionOptions = Private.subRegionOptions
 
@@ -830,6 +864,12 @@ local function ConstructFunction(prototype, trigger, skipOptional)
     init = prototype.init(trigger);
   else
     init = "";
+  end
+  local function HandleAura(aura)
+    if not aura or (type(aura.name) ~= "string" and not issecretvalue(aura.name)) or type(aura.spellId) ~= "number" then
+      return
+    end
+    local name = aura.name
   end
   for index, arg in pairs(prototype.args) do
     local enable = EvalBooleanArg(arg.enable, trigger, true)
@@ -1393,6 +1433,7 @@ loadedFrame:SetScript("OnEvent", function(self, event, ...)
         Private.CleanArchive(db.historyCutoff, db.migrationCutoff);
       end
       db.minimap = db.minimap or { hide = false };
+      db.secretDebug = db.secretDebug or false;
       LDBIcon:Register("WeakAuras", Broker_WeakAuras, db.minimap);
     end
   elseif(event == "PLAYER_LOGIN") then
@@ -1532,7 +1573,7 @@ local function StoreBossGUIDs()
     for i = 1, 10 do
       if (UnitExists ("boss" .. i)) then
         local guid = UnitGUID ("boss" .. i)
-        if (guid) then
+        if (guid) and not issecretvalue(guid) then
           WeakAuras.CurrentEncounter.boss_guids [guid] = true
         end
       end
@@ -6440,13 +6481,13 @@ function Private.ExecEnv.ParseZoneCheck(input)
              and self:CheckNegative(zoneId, zonegroupId, instanceId, minimapZoneText)
     end,
     CheckPositive = function(self, zoneId, zonegroupId, instanceId, minimapZoneText)
-      return self.zoneIds[zoneId] or self.zoneGroupIds[zonegroupId] or (instanceId and self.instanceIds[instanceId]) or self.areaNames[minimapZoneText]
+      return (zoneId and self.zoneIds[zoneId]) or (zonegroupId and self.zoneGroupIds[zonegroupId]) or (instanceId and self.instanceIds[instanceId]) or (minimapZoneText and self.areaNames[minimapZoneText])
     end,
     CheckNegative = function(self, zoneId, zonegroupId, instanceId, minimapZoneText)
-      return not (self.negZoneIds[zoneId]
-                  or self.negZoneGroupIds[zonegroupId]
+      return not ((zoneId and self.negZoneIds[zoneId])
+                  or (zonegroupId and self.negZoneGroupIds[zonegroupId])
                   or (instanceId and self.negInstanceIds[instanceId])
-                  or self.negAreaNames[minimapZoneText])
+                  or (minimapZoneText and self.negAreaNames[minimapZoneText]))
     end,
     AddId = function(self, input, start, last)
       local id = tonumber(strtrim(input:sub(start, last)))
@@ -6558,7 +6599,7 @@ function Private.ExecEnv.CreateSpellChecker()
       end
     end,
     CheckName = function(self, name)
-      return self.names[name]
+      return name ~= nil and self.names[name]
     end
   }
   return matcher
