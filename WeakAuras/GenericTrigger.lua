@@ -89,6 +89,9 @@ local issecretvalue = issecretvalue or function() return false end
 ---@param smart? boolean
 ---@return boolean unitExists
 function WeakAuras.UnitExistsFixed(unit, smart)
+  if Private.ExecEnv.ShouldUnitIdentityBeSecret(unit) then
+    return true
+  end
   local exists
   if #unit > 9 and unit:sub(1, 9) == "nameplate" then
     exists = nameplateExists[unit]
@@ -890,7 +893,7 @@ function Private.ScanEvents(event, arg1, arg2, ...)
     return
   end
   if(event == "COMBAT_LOG_EVENT_UNFILTERED") then
-    if WeakAuras.IsMidnight() then
+    if Private.ExecEnv.IsCombatLogRestricted() then
       Private.StopProfileSystem("generictrigger " .. system)
       return
     end
@@ -2240,7 +2243,7 @@ do
   function WeakAuras.InitSwingTimer()
     if not(swingTimerFrame) then
       swingTimerFrame = CreateFrame("Frame");
-      if not WeakAuras.IsMidnight() then
+      if not Private.ExecEnv.IsCombatLogRestricted() then
         swingTimerFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
       end
       swingTimerFrame:RegisterEvent("PLAYER_ENTER_COMBAT");
@@ -3716,7 +3719,7 @@ function WeakAuras.WatchUnitChange(unit)
       local oldUnitExists = watchUnitChange.unitExists[unitA]
       local oldGUID = watchUnitChange.unitIdToGUID[unitA]
       local newGUID = WeakAuras.UnitExistsFixed(unitA) and UnitGUID(unitA)
-      if issecretvalue(newGUID) then
+      if Private.ExecEnv.ShouldUnitIdentityBeSecret(unitA) or issecretvalue(newGUID) then
         newGUID = "secret-" .. unitA
       end
       local unitExists = UnitExists(unitA) -- UnitExistsFixed check both UnitExists and UnitGUID, but in edge cases we are interested in UnitExists
@@ -3919,13 +3922,14 @@ function WeakAuras.WatchUnitChange(unit)
   if watchUnitChange.trackedUnits[unit] then
     return
   end
+  local identitySecret = Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)
   local guid = UnitGUID(unit)
-  if issecretvalue(guid) then
+  if identitySecret or issecretvalue(guid) then
     guid = "secret-" .. unit
   end
   watchUnitChange.trackedUnits[unit] = true
   local newGUID = WeakAuras.UnitExistsFixed(unit) and UnitGUID(unit)
-  if issecretvalue(newGUID) then
+  if identitySecret or issecretvalue(newGUID) then
     newGUID = "secret-" .. unit
   end
   watchUnitChange.unitIdToGUID[unit] = newGUID

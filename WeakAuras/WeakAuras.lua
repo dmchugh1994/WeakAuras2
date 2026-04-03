@@ -1571,10 +1571,13 @@ local function StoreBossGUIDs()
   Private.StartProfileSystem("boss_guids")
   if (WeakAuras.CurrentEncounter and WeakAuras.CurrentEncounter.boss_guids) then
     for i = 1, 10 do
-      if (UnitExists ("boss" .. i)) then
-        local guid = UnitGUID ("boss" .. i)
-        if (guid) and not issecretvalue(guid) then
-          WeakAuras.CurrentEncounter.boss_guids [guid] = true
+      local bossUnit = "boss" .. i
+      if (UnitExists(bossUnit)) then
+        if not Private.ExecEnv.ShouldUnitIdentityBeSecret(bossUnit) then
+          local guid = UnitGUID(bossUnit)
+          if (guid) and not issecretvalue(guid) then
+            WeakAuras.CurrentEncounter.boss_guids[guid] = true
+          end
         end
       end
     end
@@ -3613,15 +3616,9 @@ function Private.ReleaseClone(id, cloneId, regionType)
 end
 
 function Private.HandleChatAction(message_type, message, message_dest, message_dest_isunit, message_channel, r, g, b, region, customCache, when, formatters)
-  -- Midnight: Suppress SendChatMessage-based actions inside instances
-  -- Local displays (PRINT, TTS, ERROR, COMBAT) are still allowed
-  if WeakAuras.IsMidnight() and message_type ~= "PRINT" and message_type ~= "TTS"
+  if Private.ExecEnv.InChatMessagingLockdown() and message_type ~= "PRINT" and message_type ~= "TTS"
     and message_type ~= "ERROR" and message_type ~= "COMBAT" then
-    local _, instanceType = IsInInstance()
-    if instanceType == "party" or instanceType == "raid"
-      or instanceType == "pvp" or instanceType == "arena" then
-      return
-    end
+    return
   end
   local useHiddenStates = when == "finish"
   if (message:find('%%')) then

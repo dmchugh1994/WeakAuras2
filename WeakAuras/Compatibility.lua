@@ -192,3 +192,73 @@ Private.ExecEnv.ExpandFactionHeader = C_Reputation.ExpandFactionHeader or Expand
 Private.ExecEnv.CollapseFactionHeader = C_Reputation.CollapseFactionHeader or CollapseFactionHeader
 Private.ExecEnv.AreLegacyReputationsShown = C_Reputation.AreLegacyReputationsShown or function() return true end
 Private.ExecEnv.GetReputationSortType = C_Reputation.GetReputationSortType or function() return 0 end;
+
+if C_Secrets then
+  Private.ExecEnv.HasSecretRestrictions = C_Secrets.HasSecretRestrictions
+  Private.ExecEnv.ShouldUnitHealthMaxBeSecret = C_Secrets.ShouldUnitHealthMaxBeSecret
+  Private.ExecEnv.ShouldUnitPowerBeSecret = C_Secrets.ShouldUnitPowerBeSecret
+  Private.ExecEnv.ShouldUnitPowerMaxBeSecret = C_Secrets.ShouldUnitPowerMaxBeSecret
+  Private.ExecEnv.ShouldUnitIdentityBeSecret = C_Secrets.ShouldUnitIdentityBeSecret
+  Private.ExecEnv.ShouldUnitSpellCastingBeSecret = C_Secrets.ShouldUnitSpellCastingBeSecret
+  Private.ExecEnv.ShouldUnitSpellCastBeSecret = C_Secrets.ShouldUnitSpellCastBeSecret
+  Private.ExecEnv.ShouldUnitComparisonBeSecret = C_Secrets.ShouldUnitComparisonBeSecret
+  Private.ExecEnv.ShouldAurasBeSecret = C_Secrets.ShouldAurasBeSecret
+  Private.ExecEnv.ShouldCooldownsBeSecret = C_Secrets.ShouldCooldownsBeSecret
+  Private.ExecEnv.ShouldSpellCooldownBeSecret = C_Secrets.ShouldSpellCooldownBeSecret
+  Private.ExecEnv.ShouldSpellAuraBeSecret = C_Secrets.ShouldSpellAuraBeSecret
+  Private.ExecEnv.ShouldTotemSlotBeSecret = C_Secrets.ShouldTotemSlotBeSecret
+  Private.ExecEnv.ShouldTotemSpellBeSecret = C_Secrets.ShouldTotemSpellBeSecret
+  Private.ExecEnv.ShouldUnitAuraInstanceBeSecret = C_Secrets.ShouldUnitAuraInstanceBeSecret
+  Private.ExecEnv.ShouldUnitAuraIndexBeSecret = C_Secrets.ShouldUnitAuraIndexBeSecret
+  Private.ExecEnv.ShouldUnitAuraSlotBeSecret = C_Secrets.ShouldUnitAuraSlotBeSecret
+  Private.ExecEnv.ShouldActionCooldownBeSecret = C_Secrets.ShouldActionCooldownBeSecret
+  Private.ExecEnv.ShouldSpellBookItemCooldownBeSecret = C_Secrets.ShouldSpellBookItemCooldownBeSecret
+  Private.ExecEnv.GetPowerTypeSecrecy = C_Secrets.GetPowerTypeSecrecy
+  Private.ExecEnv.GetSpellAuraSecrecy = C_Secrets.GetSpellAuraSecrecy
+  Private.ExecEnv.GetSpellCastSecrecy = C_Secrets.GetSpellCastSecrecy
+  Private.ExecEnv.GetSpellCooldownSecrecy = C_Secrets.GetSpellCooldownSecrecy
+else
+  local falseFunc = function() return false end
+  Private.ExecEnv.HasSecretRestrictions = falseFunc
+  Private.ExecEnv.ShouldUnitHealthMaxBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitPowerBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitPowerMaxBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitIdentityBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitSpellCastingBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitSpellCastBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitComparisonBeSecret = falseFunc
+  Private.ExecEnv.ShouldAurasBeSecret = falseFunc
+  Private.ExecEnv.ShouldCooldownsBeSecret = falseFunc
+  Private.ExecEnv.ShouldSpellCooldownBeSecret = falseFunc
+  Private.ExecEnv.ShouldSpellAuraBeSecret = falseFunc
+  Private.ExecEnv.ShouldTotemSlotBeSecret = falseFunc
+  Private.ExecEnv.ShouldTotemSpellBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitAuraInstanceBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitAuraIndexBeSecret = falseFunc
+  Private.ExecEnv.ShouldUnitAuraSlotBeSecret = falseFunc
+  Private.ExecEnv.ShouldActionCooldownBeSecret = falseFunc
+  Private.ExecEnv.ShouldSpellBookItemCooldownBeSecret = falseFunc
+  local neverSecret = function() return 0 end
+  Private.ExecEnv.GetPowerTypeSecrecy = neverSecret
+  Private.ExecEnv.GetSpellAuraSecrecy = neverSecret
+  Private.ExecEnv.GetSpellCastSecrecy = neverSecret
+  Private.ExecEnv.GetSpellCooldownSecrecy = neverSecret
+end
+
+if C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID then
+  Private.ExecEnv.IsAuraFilteredOutByInstanceID = C_UnitAuras.IsAuraFilteredOutByInstanceID
+else
+  Private.ExecEnv.IsAuraFilteredOutByInstanceID = function() return false end
+end
+
+if C_CombatLog and C_CombatLog.IsCombatLogRestricted then
+  Private.ExecEnv.IsCombatLogRestricted = C_CombatLog.IsCombatLogRestricted
+else
+  Private.ExecEnv.IsCombatLogRestricted = function() return false end
+end
+
+if C_ChatInfo and C_ChatInfo.InChatMessagingLockdown then
+  Private.ExecEnv.InChatMessagingLockdown = C_ChatInfo.InChatMessagingLockdown
+else
+  Private.ExecEnv.InChatMessagingLockdown = function() return false end
+end

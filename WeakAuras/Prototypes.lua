@@ -2670,7 +2670,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -3266,6 +3266,7 @@ Private.event_prototypes = {
       trigger.unit = trigger.unit or "player";
       local ret = [=[
         unit = string.lower(unit)
+        if Private.ExecEnv.ShouldUnitHealthMaxBeSecret(unit) then return false end
         local name, realm = WeakAuras.UnitNameWithRealm(unit)
         local smart = %s
       ]=];
@@ -3499,7 +3500,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -3798,6 +3799,7 @@ Private.event_prototypes = {
       local ret = {}
       table.insert(ret, ([=[
         unit = string.lower(unit)
+        if Private.ExecEnv.ShouldUnitPowerBeSecret(unit) then return false end
         local name, realm = WeakAuras.UnitNameWithRealm(unit)
         local smart = %s
         local powerType = %s;
@@ -4103,7 +4105,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -4315,6 +4317,7 @@ Private.event_prototypes = {
       trigger.unit = trigger.unit or "player";
       local ret = [=[
         unit = string.lower(unit)
+        if Private.ExecEnv.ShouldUnitPowerBeSecret(unit) then return false end
         local unitname, realm = WeakAuras.UnitNameWithRealm(unit)
         local smart = %s
       ]=]
@@ -4581,7 +4584,7 @@ Private.event_prototypes = {
         name = "sourceUnit",
         display = L["Source Unit"],
         type = "unit",
-        test = "((not issecretvalue or not issecretvalue((UnitGUID(%q)))) and sourceGUID == UnitGUID(%q) or false) and sourceGUID",
+        test = "((not Private.ExecEnv.ShouldUnitIdentityBeSecret(%q)) and sourceGUID == UnitGUID(%q) or false) and sourceGUID",
         values = "actual_unit_types_with_specific",
         enable = function(trigger)
           return not (trigger.subeventPrefix == "ENVIRONMENTAL")
@@ -4589,7 +4592,7 @@ Private.event_prototypes = {
         store = true,
         conditionType = "select",
         conditionTest = function(state, needle, op)
-          return state and state.show and ((not issecretvalue or not issecretvalue((UnitGUID(needle)))) and (state.sourceGUID == UnitGUID(needle))) == (op == "==")
+          return state and state.show and ((not Private.ExecEnv.ShouldUnitIdentityBeSecret(needle)) and (state.sourceGUID == UnitGUID(needle))) == (op == "==")
         end
       },
       {
@@ -4720,7 +4723,7 @@ Private.event_prototypes = {
         name = "destUnit",
         display = L["Destination Unit"],
         type = "unit",
-        test = "((not issecretvalue or not issecretvalue((UnitGUID(%q)))) and destGUID == UnitGUID(%q) or false) and destGUID",
+        test = "((not Private.ExecEnv.ShouldUnitIdentityBeSecret(%q)) and destGUID == UnitGUID(%q) or false) and destGUID",
         values = "actual_unit_types_with_specific",
         enable = function(trigger)
           return not (trigger.subeventPrefix == "SPELL" and trigger.subeventSuffix == "_CAST_START");
@@ -4728,7 +4731,7 @@ Private.event_prototypes = {
         store = true,
         conditionType = "select",
         conditionTest = function(state, needle, op)
-          return state and state.show and ((not issecretvalue or not issecretvalue((UnitGUID(needle)))) and (state.destGUID == UnitGUID(needle))) == (op == "==")
+          return state and state.show and ((not Private.ExecEnv.ShouldUnitIdentityBeSecret(needle)) and (state.destGUID == UnitGUID(needle))) == (op == "==")
         end
       },
       {
@@ -5378,6 +5381,7 @@ Private.event_prototypes = {
         local followoverride = %s
         local track = %q
         local effectiveSpellId = Private.ExecEnv.GetEffectiveSpellId(spellname, useExact, followoverride)
+        if Private.ExecEnv.ShouldSpellCooldownBeSecret(effectiveSpellId or spellname) then return false end
         local name, _, icon = Private.ExecEnv.GetSpellInfo(effectiveSpellId)
         local startTime, duration, gcdCooldown, readyTime, modRate, paused = WeakAuras.GetSpellCooldown(effectiveSpellId, ignoreRuneCD, showgcd, ignoreSpellKnown, track)
         local charges, maxCharges, spellCount, chargeGainTime, chargeLostTime = WeakAuras.GetSpellCharges(effectiveSpellId, ignoreSpellKnown)
@@ -7555,6 +7559,7 @@ Private.event_prototypes = {
             return false
           end
 
+          if Private.ExecEnv.ShouldTotemSlotBeSecret(totemType) then return false end
           local _, totemName, startTime, duration, icon, modRate, spellId = GetTotemInfo(totemType);
           active = (startTime and startTime ~= 0);
 
@@ -9378,6 +9383,7 @@ Private.event_prototypes = {
       trigger.unit = trigger.unit or "target";
       local ret = [[
         unit = string.lower(unit)
+        if unit ~= "none" and Private.ExecEnv.ShouldUnitComparisonBeSecret("player", unit) then return false end
         local name = UnitName(unit, false)
         local ok = true
         local aggro, status, threatpct, rawthreatpct, threatvalue, threattotal
@@ -9490,7 +9496,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -9736,6 +9742,7 @@ Private.event_prototypes = {
       trigger.unit = trigger.unit or "player";
       local ret = [=[
         unit = string.lower(unit)
+        if Private.ExecEnv.ShouldUnitSpellCastingBeSecret(unit) then return false end
         local destUnit = unit .. '-target'
         local sourceName, sourceRealm = WeakAuras.UnitNameWithRealm(unit)
         local destName, destRealm = WeakAuras.UnitNameWithRealm(destUnit)
@@ -10008,7 +10015,7 @@ Private.event_prototypes = {
         type = "string",
         multiline = true,
         store = true,
-        init = "select(6, strsplit('-', (not (issecretvalue and issecretvalue(UnitGUID(unit)))) and UnitGUID(unit) or ''))",
+        init = "select(6, strsplit('-', (not Private.ExecEnv.ShouldUnitIdentityBeSecret(unit)) and UnitGUID(unit) or ''))",
         conditionType = "string",
         preamble = "local npcIdChecker = Private.ExecEnv.ParseStringCheck(%q)",
         test = "npcIdChecker:Check(npcId)",
@@ -12402,32 +12409,13 @@ if WeakAuras.IsRetail() then
   Private.event_prototypes["Queued Action"] = nil
 end
 
--- Midnight: Disable combat-dependent triggers due to Blizzard API restrictions
--- Combat Log events, health/power tracking on non-player units, swing timers,
--- and other combat-specific systems are no longer accessible to addons in instances.
-if WeakAuras.IsMidnight() then
-  -- Combat Log category — CLEU entirely unavailable in instances
-  Private.event_prototypes["Combat Log"] = nil
-  -- Combat-dependent unit triggers — Secret Values on non-player units
-  Private.event_prototypes["Health"] = nil
-  Private.event_prototypes["Power"] = nil
-  Private.event_prototypes["Alternate Power"] = nil
-  if Private.event_prototypes["Threat Situation"] then
-    Private.event_prototypes["Threat Situation"] = nil
-  end
-  -- Combat-dependent spell triggers
-  Private.event_prototypes["Swing Timer"] = nil
-  Private.event_prototypes["Spell Activation Overlay"] = nil
-  if Private.event_prototypes["Assisted Combat Next Cast"] then
-    Private.event_prototypes["Assisted Combat Next Cast"] = nil
-  end
-  -- Combat event triggers
-  Private.event_prototypes["Combat Events"] = nil
-  -- GTFO depends on combat log
-  Private.event_prototypes["GTFO"] = nil
-  -- Remove combatlog category from the category list
-  Private.event_categories["combatlog"] = nil
-end
+-- Midnight: Health, Power, Alternate Power, Threat, Cast, Cooldown, and Totem
+-- prototypes now use C_Secrets APIs at runtime to skip secret units/spells
+-- rather than removing the prototypes entirely. This allows triggers to still
+-- work for the player and other non-secret units.
+--
+-- CLEU-dependent prototypes remain available; runtime checks in GenericTrigger
+-- and BuffTrigger2 use C_CombatLog.IsCombatLogRestricted() to gate processing.
 
 Private.category_event_prototype = {}
 for name, prototype in pairs(Private.event_prototypes) do

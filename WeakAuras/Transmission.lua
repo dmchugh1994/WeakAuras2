@@ -222,12 +222,8 @@ local Chomp = LibStub:GetLibrary("Chomp")
 -- the biggest bottleneck by far is in transmission and printing; so use maximal compression
 local configForDeflate = {level = 9}
 
--- Midnight: Addon communication is restricted inside instanced content
 local function IsCommRestricted()
-  if not WeakAuras.IsMidnight() then return false end
-  local _, instanceType = IsInInstance()
-  return instanceType == "party" or instanceType == "raid"
-    or instanceType == "pvp" or instanceType == "arena"
+  return Private.ExecEnv.InChatMessagingLockdown()
 end
 
 local configForLS = {

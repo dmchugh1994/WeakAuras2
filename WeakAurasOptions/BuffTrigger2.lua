@@ -735,6 +735,27 @@ local function GetBuffTriggerOptions(data, triggernum)
       hidden = function() return not trigger.type == "aura2" end
     },
 
+    secretAuraMode = {
+      type = "select",
+      name = L["Secret Aura Mode"],
+      desc = L["Controls how secret/private auras are handled.\n\nOff: Default behavior, secret auras are rescued by spell ID or dropped.\nOnly: Only show auras identified as secret via fingerprinting.\nInclude: Show all auras including identified secret ones."],
+      order = 64.4,
+      width = WeakAuras.doubleWidth,
+      values = {
+        off = L["Off"],
+        only = L["Secret Auras Only"],
+        include = L["Include Secret Auras"],
+      },
+      sorting = {"off", "only", "include"},
+      get = function()
+        return trigger.secretAuraMode or "off"
+      end,
+      set = function(info, v)
+        trigger.secretAuraMode = v
+        WeakAuras.Add(data)
+      end,
+      hidden = function() return not (trigger.type == "aura2") end
+    },
     fetchTooltip = {
       type = "toggle",
       name = L["Fetch Tooltip Information"],

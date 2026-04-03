@@ -29,6 +29,7 @@ local WA_GetUnitAura = function(unit, spell, filter)
   if filter and not filter:upper():find("FUL") then
       filter = filter.."|HELPFUL"
   end
+  if Private.ExecEnv.ShouldAurasBeSecret() then return end
   for i = 1, 255 do
     local name, _, _, _, _, _, _, _, _, spellId = UnitAura(unit, i, filter)
     if not name then return end
@@ -202,7 +203,6 @@ local blockedFunctions = {
   GetEditBoxMetatable = true,
   GetFontStringMetatable = true,
   GetFrameMetatable = true,
-  -- Midnight: Block combat log access in custom code
   CombatLogGetCurrentEventInfo = WeakAuras.IsMidnight() or nil,
 }
 

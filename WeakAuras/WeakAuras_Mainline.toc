@@ -54,6 +54,10 @@ Animations.lua
 Conditions.lua
 AnchorToWeakAuras.lua
 
+# Secret Aura Tracking
+SecretAuraDatabase.lua
+SecretAuraEngine.lua
+
 # Trigger systems
 LibSpecializationWrapper.lua
 BuffTrigger2.lua
