@@ -737,14 +737,14 @@ local function GetBuffTriggerOptions(data, triggernum)
 
     secretAuraMode = {
       type = "select",
-      name = L["Secret Aura Mode"],
-      desc = L["Controls how secret/private auras are handled.\n\nOff: Default behavior, secret auras are rescued by spell ID or dropped.\nOnly: Only show auras identified as secret via fingerprinting.\nInclude: Show all auras including identified secret ones."],
+      name = L["Restricted Aura Handling"],
+      desc = L["Controls how restricted (private) auras are handled inside instanced content where Blizzard hides aura names and spell IDs.\n\n|cFFFFFFFFNormal|r\nDefault behavior. Restricted auras are shown as 'Private Aura' alongside normal auras.\n\n|cFFFFFFFFRestricted Only|r\nOnly show auras that are restricted. Filters out all normal (non-restricted) auras.\n\n|cFFFFFFFFAll + Restricted|r\nSame as Normal. Show all auras including restricted ones."],
       order = 64.4,
       width = WeakAuras.doubleWidth,
       values = {
-        off = L["Off"],
-        only = L["Secret Auras Only"],
-        include = L["Include Secret Auras"],
+        off = L["Normal"],
+        only = L["Restricted Only"],
+        include = L["All + Restricted"],
       },
       sorting = {"off", "only", "include"},
       get = function()

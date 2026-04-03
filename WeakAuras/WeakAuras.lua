@@ -193,7 +193,7 @@ function Private.PrintHelp()
   print(L["If you require additional assistance, please open a ticket on GitHub or visit our Discord at https://discord.gg/weakauras!"])
 end
 
-SLASH_WEAKAURAS1, SLASH_WEAKAURAS2 = "/weakauras", "/llama";
+SLASH_WEAKAURAS1, SLASH_WEAKAURAS2, SLASH_WEAKAURAS3, SLASH_WEAKAURAS4 = "/weakauras", "/llama", "/ll", "/la";
 function SlashCmdList.WEAKAURAS(input)
   local args, msg = {}, nil
 
@@ -273,18 +273,18 @@ function SlashCmdList.WEAKAURAS(input)
 end
 
 local secretWarningsShown = {}
-function WeakAuras.LogSecretAuraSkip(unit, aura, rescued)
+function WeakAuras.LogSecretAuraSkip(unit, aura, hasKnownSpellId)
   if not aura or not issecretvalue(aura.name) then return end
 
   if db.secretDebug then
-    local status = rescued and L["(Rescued via Spell ID)"] or L["(Dropped)"]
+    local status = hasKnownSpellId and L["(Rescued via Spell ID)"] or "(Tracked as Private Aura)"
     WeakAuras.prettyPrint(L["Private Aura on %s %s: (AuraInstanceID: %s, SpellID: %s)"]:format(unit, status, tostring(aura.auraInstanceID or "N/A"), tostring(aura.spellId or "N/A")))
   elseif not secretWarningsShown[unit] then
     secretWarningsShown[unit] = true
-    if rescued then
+    if hasKnownSpellId then
       WeakAuras.prettyPrint(L["Some auras on %s have restricted names (Private Auras), but they are available via Spell ID."]:format(unit))
     else
-      WeakAuras.prettyPrint(L["Some auras on %s are restricted (Private Auras) and cannot be tracked by WeakAuras in this instance."]:format(unit))
+      WeakAuras.prettyPrint(("Some auras on %s are restricted (Private Auras) and are tracked generically."):format(unit))
     end
     WeakAuras.prettyPrint(L["Use '/llama secretdebug' to see detailed logs of restricted auras."])
   end

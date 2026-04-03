@@ -54,8 +54,7 @@ Animations.lua
 Conditions.lua
 AnchorToWeakAuras.lua
 
-# Secret Aura Tracking
-SecretAuraDatabase.lua
+# Private Aura Anchors
 SecretAuraEngine.lua
 
 # Trigger systems
