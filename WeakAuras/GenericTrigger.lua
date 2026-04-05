@@ -495,6 +495,12 @@ local function RunOverlayFuncs(event, state, id, errorHandler)
       additionalProgress.direction = nil;
       additionalProgress.width = nil;
       additionalProgress.offset = nil;
+    elseif (type(a) == "number" and issecretvalue(a)) or (type(b) == "number" and issecretvalue(b)) or (type(c) == "number" and issecretvalue(c)) then
+      additionalProgress.min = nil;
+      additionalProgress.max = nil;
+      additionalProgress.direction = nil;
+      additionalProgress.width = nil;
+      additionalProgress.offset = nil;
     elseif (type(a) == "string") then
       if (additionalProgress.direction ~= a) then
         additionalProgress.direction = a;
@@ -537,6 +543,9 @@ local function callFunctionForActivateEvent(func, trigger, state, property, erro
   end
   local ok, value = xpcall(func, errorHandler, trigger)
   if ok then
+    if type(value) == "number" and issecretvalue(value) then
+      value = nil
+    end
     if state[property] ~= value then
       state[property] = value
       state.changed = true
@@ -576,8 +585,8 @@ function Private.ActivateEvent(id, triggernum, data, state, errorHandler)
     state.autoHide = autoHide;
   elseif (data.durationFunc) then
     local ok, arg1, arg2, arg3, inverse = xpcall(data.durationFunc, errorHandler or Private.GetErrorHandlerId(id, L["Duration Function"]), data.trigger);
-    arg1 = ok and type(arg1) == "number" and arg1 or 0;
-    arg2 = ok and type(arg2) == "number" and arg2 or 0;
+    arg1 = ok and type(arg1) == "number" and not issecretvalue(arg1) and arg1 or 0;
+    arg2 = ok and type(arg2) == "number" and not issecretvalue(arg2) and arg2 or 0;
 
 
     if (state.inverse ~= inverse) then
@@ -5150,8 +5159,8 @@ function GenericTrigger.CreateFallbackState(data, triggernum, state)
       Private.ActivateAuraEnvironment(nil)
       return;
     end
-    arg1 = type(arg1) == "number" and arg1 or 0;
-    arg2 = type(arg2) == "number" and arg2 or 0;
+    arg1 = type(arg1) == "number" and not issecretvalue(arg1) and arg1 or 0;
+    arg2 = type(arg2) == "number" and not issecretvalue(arg2) and arg2 or 0;
 
     if(type(arg3) == "string") then
       state.durationFunc = event.durationFunc;

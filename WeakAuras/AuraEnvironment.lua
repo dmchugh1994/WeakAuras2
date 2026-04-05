@@ -530,7 +530,8 @@ local FakeWeakAurasMixin = {
     GetBigWigsStage = function(...) return Private.ExecEnv.BossMods.BigWigs:GetStage(...) end,
     RegisterBigWigsTimer = function() Private.ExecEnv.BossMods.BigWigs:RegisterTimer() end,
     RegisterDBMCallback = function() Private.ExecEnv.BossMods.DBM:RegisterTimer() end,
-    GetBossStage = function() return Private.ExecEnv.BossMods.Generic:GetStage() end
+    GetBossStage = function() return Private.ExecEnv.BossMods.Generic:GetStage() end,
+    SafeAuraNumber = WeakAuras.SafeAuraNumber
   },
   blocked = blocked,
   setBlocked = function()

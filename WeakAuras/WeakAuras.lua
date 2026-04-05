@@ -181,6 +181,185 @@ function WeakAuras.OpenOptions(msg)
   end
 end
 
+--- Dump spell-related API results and secrecy for debugging Private Aura / BuffTrigger2 behavior.
+---@param spellIdArg string|number
+function Private.PrintSpellApiDebug(spellIdArg)
+  local id = tonumber(spellIdArg)
+  if not id or id < 1 or id ~= math.floor(id) then
+    prettyPrint(L["Usage: /ll spell <spellID> - positive numeric spell id"])
+    return
+  end
+
+  local function labelSecret(v)
+    if v == nil then
+      return "nil", false
+    end
+    if issecretvalue(v) then
+      return "|cffff0000[SECRET]|r", true
+    end
+    return tostring(v), false
+  end
+
+  local function printField(indent, name, v)
+    local text, secret = labelSecret(v)
+    print(("%s%s: %s%s"):format(indent or "", name, text, secret and "  |cffff8800(restricted)|r" or ""))
+  end
+
+  print(("|cff00ccffWeakAuras:|r spell API check  |cffffffffspellID=%d|r"):format(id))
+  print("— Fields BuffTrigger2 reads from |cffffffffUnitAuraData|r (when present): name, spellId, icon, applications, duration, expirationTime, timeMod, sourceUnit, isStealable, isBossAura, isFromPlayerOrPlayerPet, dispelName, points, auraInstanceID")
+  print("— On |cffffffffplayer|r, |cffffffffAuraUtil|r may list nothing while |cffffffffShouldAurasBeSecret(player)|r is true; BuffTrigger2 then uses |cffffffffC_UnitAuras.GetPlayerAuraBySpellID|r for watched spell IDs.")
+  print("— On other units, |cffff8800non–anchor-restricted|r secret auras (no |cffffffffShouldUnitAuraInstanceBeSecret|r) are still dropped; anchor-restricted ones become |cffffffffPrivate Aura|r when spell id is known.")
+
+  print("")
+  print("|cffffff00C_Spell (spellbook / tooltip data)|r")
+  if C_Spell and C_Spell.GetSpellInfo then
+    local info = C_Spell.GetSpellInfo(id)
+    if not info then
+      print("  C_Spell.GetSpellInfo: nil")
+    else
+      local keys = {}
+      for k in pairs(info) do
+        keys[#keys + 1] = k
+      end
+      table.sort(keys)
+      for _, k in ipairs(keys) do
+        printField("  ", tostring(k), info[k])
+      end
+    end
+  else
+    print("  (C_Spell.GetSpellInfo not available)")
+  end
+
+  if C_Spell and C_Spell.GetSpellName then
+    -- GetSpellName returns multiple values; only pass the first into printField(indent, label, value).
+    printField("  ", "GetSpellName", select(1, C_Spell.GetSpellName(id)))
+  end
+
+  print("")
+  print("|cffffff00Legacy GetSpellInfo (WeakAuras ExecEnv)|r")
+  do
+    local name, rank, icon, castTime, minRange, maxRange, sid, origIcon = Private.ExecEnv.GetSpellInfo(id)
+    printField("  ", "name", name)
+    printField("  ", "rank", rank)
+    printField("  ", "icon", icon)
+    printField("  ", "castTime", castTime)
+    printField("  ", "minRange", minRange)
+    printField("  ", "maxRange", maxRange)
+    printField("  ", "spellID (7th)", sid)
+    printField("  ", "originalIconID", origIcon)
+  end
+
+  print("")
+  print("|cffffff00C_Secrets (spell-level secrecy)|r")
+  if C_Secrets then
+    local function trySecretField(label, fn)
+      local ok, r = pcall(fn)
+      if ok then
+        printField("  ", label, r)
+      else
+        print(("  %s: |cffff0000error|r %s"):format(label, tostring(r)))
+      end
+    end
+    trySecretField("ShouldSpellAuraBeSecret(spellID)", function() return Private.ExecEnv.ShouldSpellAuraBeSecret(id) end)
+    trySecretField("ShouldSpellCooldownBeSecret(spellID)", function() return Private.ExecEnv.ShouldSpellCooldownBeSecret(id) end)
+    trySecretField("GetSpellAuraSecrecy(spellID)", function() return Private.ExecEnv.GetSpellAuraSecrecy(id) end)
+    trySecretField("GetSpellCastSecrecy(spellID)", function() return Private.ExecEnv.GetSpellCastSecrecy(id) end)
+    trySecretField("GetSpellCooldownSecrecy(spellID)", function() return Private.ExecEnv.GetSpellCooldownSecrecy(id) end)
+    trySecretField("ShouldAurasBeSecret(player)", function() return Private.ExecEnv.ShouldAurasBeSecret("player") end)
+  else
+    print("  (C_Secrets not available on this client)")
+  end
+
+  print("")
+  print("|cffffff00Spell known / usable|r")
+  do
+    local ok, a = pcall(IsPlayerSpell, id)
+    print(("  IsPlayerSpell: %s"):format(ok and tostring(a) or "n/a"))
+  end
+  do
+    local f = IsSpellKnownOrOverridesAndBaseIsKnown
+    if f then
+      local ok, a = pcall(f, id, false)
+      local ok2, b = pcall(f, id, true)
+      print(("  IsSpellKnownOrOverridesAndBaseIsKnown(id, false): %s"):format(ok and tostring(a) or "n/a"))
+      print(("  IsSpellKnownOrOverridesAndBaseIsKnown(id, true): %s"):format(ok2 and tostring(b) or "n/a"))
+    end
+  end
+  if C_Spell and C_Spell.IsSpellUsable then
+    local ok, usable, nomana = pcall(C_Spell.IsSpellUsable, id)
+    if ok then
+      print(("  C_Spell.IsSpellUsable: usable=%s noMana=%s"):format(tostring(usable), tostring(nomana)))
+    end
+  end
+
+  print("")
+  print("|cffffff00Player |cffffffff(spellId match)|r — AuraUtil.ForEachAura (same path as BuffTrigger2 iterator)|r")
+  if WeakAuras.IsRetail() and AuraUtil and AuraUtil.ForEachAura then
+    local found = 0
+    local secretSpellIdCount = { HELPFUL = 0, HARMFUL = 0 }
+    for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
+      AuraUtil.ForEachAura("player", filter, nil, function(aura)
+        local sid = aura.spellId
+        -- Secret spell IDs must not be compared to a normal number (runtime error).
+        if issecretvalue(sid) then
+          secretSpellIdCount[filter] = secretSpellIdCount[filter] + 1
+        elseif type(sid) == "number" and sid == id then
+          found = found + 1
+          print(("  match filter=%s auraInstanceID=%s"):format(filter, tostring(aura.auraInstanceID)))
+          local fields = {
+            "name", "spellId", "icon", "applications", "duration", "expirationTime", "timeMod",
+            "sourceUnit", "isStealable", "isBossAura", "isFromPlayerOrPlayerPet", "dispelName",
+            "points", "auraInstanceID",
+          }
+          for _, key in ipairs(fields) do
+            printField("    ", key, aura[key])
+          end
+          if aura.auraInstanceID and Private.ExecEnv.ShouldUnitAuraInstanceBeSecret then
+            local okAnchor, anchorVal = pcall(Private.ExecEnv.ShouldUnitAuraInstanceBeSecret, "player", aura.auraInstanceID)
+            if okAnchor then
+              printField("    ", "ShouldUnitAuraInstanceBeSecret(player, instanceID)", anchorVal)
+            else
+              print(("    ShouldUnitAuraInstanceBeSecret: |cffff0000error|r %s"):format(tostring(anchorVal)))
+            end
+          end
+        end
+      end, true)
+    end
+    print(("  |cffffffffSummary:|r entries with numeric spellId == %d: |cffffffff%d|r"):format(id, found))
+    print(("  Auras on player with |cffff0000SECRET spellId|r: HELPFUL=%d HARMFUL=%d"):format(secretSpellIdCount.HELPFUL, secretSpellIdCount.HARMFUL))
+    if found == 0 then
+      print(("  |cffff8800No iterator rows|r for this id (common when |cffffffffShouldAurasBeSecret(player)|r is true and the buff is up)."))
+    end
+  else
+    print("  (AuraUtil.ForEachAura not used on this client; compare UnitAura indices manually if needed.)")
+  end
+
+  print("")
+  print("|cffffff00Player |cffffffff(spellId match)|r — C_UnitAuras.GetPlayerAuraBySpellID (BuffTrigger2 supplement after iterator)|r")
+  if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+    local ok, auraOrErr = pcall(C_UnitAuras.GetPlayerAuraBySpellID, id)
+    if not ok then
+      print(("  pcall failed: %s"):format(tostring(auraOrErr)))
+    elseif not auraOrErr then
+      print("  |cffff0000nil|r — no row for this spell on the player (or Blizzard blocks this API for this spell). WeakAuras cannot track this buff from unit APIs.")
+    else
+      print("  |cff00ff00Non-nil AuraData|r — BuffTrigger2 can use this when the trigger watches this spell id on |cffffffffplayer|r.")
+      local keys = {}
+      for k in pairs(auraOrErr) do
+        keys[#keys + 1] = k
+      end
+      table.sort(keys)
+      for _, k in ipairs(keys) do
+        printField("    ", tostring(k), auraOrErr[k])
+      end
+    end
+  else
+    print("  (not available on this client)")
+  end
+
+  prettyPrint(L["Spell API check complete."])
+end
+
 function Private.PrintHelp()
   print(L["Usage:"])
   print(L["/llama help - Show this message"])
@@ -190,6 +369,7 @@ function Private.PrintHelp()
   print(L["/llama pprint - Show the results from the most recent profiling"])
   print(L["/llama repair - Repair tool"])
   print(L["/llama secretdebug - Toggle detailed logging for restricted (Private) auras"])
+  print(L["/llama spell <spellID> - Print spell API and player aura secrecy (Private Aura debugging)"])
   print(L["If you require additional assistance, please open a ticket on GitHub or visit our Discord at https://discord.gg/weakauras!"])
 end
 
@@ -266,6 +446,12 @@ function SlashCmdList.WEAKAURAS(input)
     WeakAuras.prettyPrint(L["Secret Aura Debugging: %s"]:format(db.secretDebug and L["Enabled"] or L["Disabled"]))
     if db.secretDebug then
       WeakAuras.ClearSecretWarnings()
+    end
+  elseif msg == "spell" then
+    if not args[1] then
+      prettyPrint(L["Usage: /ll spell <spellID> - positive numeric spell id"])
+    else
+      Private.PrintSpellApiDebug(args[1])
     end
   else
     WeakAuras.OpenOptions(msg);
@@ -6246,6 +6432,18 @@ end
 function WeakAuras.SafeToNumber(input)
   local nr = tonumber(input)
   return nr and (nr < 2147483648 and nr > -2147483649) and nr or nil
+end
+
+--- Use for values from UnitAura and similar APIs: plain numbers only; restricted/secret values become fallback.
+---@param n any
+---@param fallback number?
+---@return number
+function WeakAuras.SafeAuraNumber(n, fallback)
+  fallback = fallback or 0
+  if type(n) ~= "number" or issecretvalue(n) then
+    return fallback
+  end
+  return n
 end
 
 local textSymbols = {

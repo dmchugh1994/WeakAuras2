@@ -88,6 +88,9 @@ local UnitAura = UnitAura
 
 local newAPI = WeakAuras.IsRetail()
 local issecretvalue = issecretvalue or function() return false end
+local ShouldUnitAuraInstanceBeSecret = Private.ExecEnv.ShouldUnitAuraInstanceBeSecret
+-- Retail: C_Secrets.ShouldUnitAuraInstanceBeSecret — same class of auras as AddPrivateAuraAnchor boss slots.
+local useAnchorRestrictedAuraClassification = newAPI and C_Secrets
 
 ---@class WeakAuras
 local WeakAuras = WeakAuras
@@ -167,14 +170,30 @@ end
 
 local function UnitIsVisibleFixed(unit)
   if unitVisible[unit] == nil then
-    unitVisible[unit] = UnitIsVisible(unit)
+    local v = UnitIsVisible(unit)
+    if issecretvalue(v) then
+      unitVisible[unit] = true
+    else
+      unitVisible[unit] = (v == true)
+    end
   end
   return unitVisible[unit]
 end
 
 local function UnitInRangeFixed(unit)
   local inRange, checked = UnitInRange(unit)
-  return inRange or not checked
+  -- UnitInRange can return secret booleans (e.g. restricted unit identity); never truth-test them.
+  if issecretvalue(inRange) or issecretvalue(checked) then
+    return true
+  end
+  -- Same as (inRange or not checked) but without boolean coercion on possibly-tainted values.
+  if inRange == true then
+    return true
+  end
+  if checked ~= true then
+    return true
+  end
+  return false
 end
 
 Private.ExecEnv.UnitInRangeFixed = UnitInRangeFixed
@@ -251,12 +270,40 @@ local function ReferenceMatchData(id, triggernum, unit, filter, index)
   match.auras[id][triggernum] = true
 end
 
+--- auranames / auraspellids may be false when the user enabled that filter but left it empty (invalid).
+--- Empty tables are truthy in Lua; Build() normalizes those to false so we do not silently match nothing.
+local function MatchPassesAuraNameOrSpellIdFilters(triggerInfo, match)
+  if triggerInfo.auranames == false and triggerInfo.auraspellids == false then
+    return false
+  end
+  if triggerInfo.auraspellids == false then
+    if not triggerInfo.auranames then
+      return false
+    end
+    return tContains(triggerInfo.auranames, match.name)
+  end
+  if triggerInfo.auranames == false then
+    if not triggerInfo.auraspellids then
+      return false
+    end
+    return tContains(triggerInfo.auraspellids, match.spellId)
+  end
+  if triggerInfo.auranames == nil and triggerInfo.auraspellids == nil then
+    return true
+  end
+  if triggerInfo.auranames and tContains(triggerInfo.auranames, match.name) then
+    return true
+  end
+  if triggerInfo.auraspellids and tContains(triggerInfo.auraspellids, match.spellId) then
+    return true
+  end
+  return false
+end
+
 local function ScanMatchData(time, triggerInfo, unit, filter)
   if matchData[unit] and matchData[unit][filter] then
     for index, match in pairs(matchData[unit][filter]) do
-      if (not triggerInfo.auranames and not triggerInfo.auraspellids)
-          or (triggerInfo.auranames and tContains(triggerInfo.auranames, match.name))
-          or (triggerInfo.auraspellids and tContains(triggerInfo.auraspellids, match.spellId)) then
+      if MatchPassesAuraNameOrSpellIdFilters(triggerInfo, match) then
         if triggerInfo.fetchTooltip then
           matchData[unit][filter][index]:UpdateTooltip(time)
         end
@@ -297,14 +344,15 @@ local function MatchesTriggerInfoMulti(triggerInfo, sourceGUID)
   end
 end
 
-local function CheckScanFuncs(scanFuncs, unit, filter, key)
+local function CheckScanFuncs(scanFuncs, unit, filter, key, scanTime)
   if scanFuncs then
+    local t = scanTime or GetTime()
     for triggerInfo in pairs(scanFuncs) do
       if triggerInfo.fetchTooltip then
         local md = matchData[unit][filter][key]
-        md:UpdateTooltip(GetTime())
+        md:UpdateTooltip(t)
       end
-      if not triggerInfo.scanFunc or triggerInfo.scanFunc(time, matchData[unit][filter][key]) then
+      if not triggerInfo.scanFunc or triggerInfo.scanFunc(t, matchData[unit][filter][key]) then
         local id = triggerInfo.id
         local triggernum = triggerInfo.triggernum
         ReferenceMatchData(id, triggernum, unit, filter, key)
@@ -384,12 +432,13 @@ if newAPI then
         local sfg = GetSubTable(scanFuncGeneral, unit, filter)
         local sfgg = GetSubTable(scanFuncGeneralGroup, unit, filter)
 
-        CheckScanFuncs(sfn, unit, filter, key)
-        CheckScanFuncs(sfng, unit, filter, key)
-        CheckScanFuncs(sfs, unit, filter, key)
-        CheckScanFuncs(sfsg, unit, filter, key)
-        CheckScanFuncs(sfg, unit, filter, key)
-        CheckScanFuncs(sfgg, unit, filter, key)
+        local now = GetTime()
+        CheckScanFuncs(sfn, unit, filter, key, now)
+        CheckScanFuncs(sfng, unit, filter, key, now)
+        CheckScanFuncs(sfs, unit, filter, key, now)
+        CheckScanFuncs(sfsg, unit, filter, key, now)
+        CheckScanFuncs(sfg, unit, filter, key, now)
+        CheckScanFuncs(sfgg, unit, filter, key, now)
       end
     end,
 
@@ -657,16 +706,24 @@ local function FindBestMatchData(time, id, triggernum, triggerInfo, matchedUnits
         if auraData.duration == 0 then
           remCheck = false
         else
+          local expT = auraData.expirationTime
           local modRate = auraData.modRate or 1
-          local remaining = (auraData.expirationTime - time) / modRate
-          remCheck = triggerInfo.remainingFunc(remaining)
-          nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, auraData.expirationTime, modRate, nextCheck)
+          if type(expT) == "number" and not issecretvalue(expT) and type(modRate) == "number" and not issecretvalue(modRate) and modRate ~= 0 then
+            local remaining = (expT - time) / modRate
+            remCheck = triggerInfo.remainingFunc(remaining)
+            nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, expT, modRate, nextCheck)
+          else
+            remCheck = false
+          end
         end
       end
 
       if remCheck then
         matchCount = matchCount + 1
-        stackCount = stackCount + (auraData.stacks or 0)
+        local st = auraData.stacks
+        if type(st) == "number" and not issecretvalue(st) then
+          stackCount = stackCount + st
+        end
         matchedUnits[unit] = true
         if not unitCounted then
           unitCount = unitCount + 1
@@ -698,16 +755,24 @@ local function FindBestMatchDataForUnit(time, id, triggernum, triggerInfo, unit)
       if auraData.expirationTime == 0 then
         remCheck = false
       else
+        local expT = auraData.expirationTime
         local modRate = auraData.modRate or 1
-        local remaining = (auraData.expirationTime - time) / modRate
-        remCheck = triggerInfo.remainingFunc(remaining)
-        nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, auraData.expirationTime, modRate, nextCheck)
+        if type(expT) == "number" and not issecretvalue(expT) and type(modRate) == "number" and not issecretvalue(modRate) and modRate ~= 0 then
+          local remaining = (expT - time) / modRate
+          remCheck = triggerInfo.remainingFunc(remaining)
+          nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, expT, modRate, nextCheck)
+        else
+          remCheck = false
+        end
       end
     end
 
     if remCheck then
       matchCount = matchCount + 1
-      stackCount = stackCount + (auraData.stacks or 0)
+      local st = auraData.stacks
+      if type(st) == "number" and not issecretvalue(st) then
+        stackCount = stackCount + st
+      end
       if not bestMatch or triggerInfo.compareFunc(bestMatch, auraData) then
         bestMatch = auraData
       end
@@ -1560,7 +1625,11 @@ local function SortMatchDataByUnitIndex(a, b)
   if a.index and b.index and a.index ~= b.index then
     return a.index < b.index
   end
-  return a.expirationTime < b.expirationTime
+  local e1, e2 = a.expirationTime, b.expirationTime
+  if type(e1) == "number" and not issecretvalue(e1) and type(e2) == "number" and not issecretvalue(e2) then
+    return e1 < e2
+  end
+  return tostring(a.auraInstanceID or "") < tostring(b.auraInstanceID or "")
 end
 
 local function UpdateTriggerState(time, id, triggernum)
@@ -1617,17 +1686,25 @@ local function UpdateTriggerState(time, id, triggernum)
             if auraData.expirationTime == 0 then
               remCheck = false
             else
+              local expT = auraData.expirationTime
               local modRate = auraData.modRate or 1
-              local remaining = (auraData.expirationTime - time) / modRate
-              remCheck = triggerInfo.remainingFunc(remaining)
-              nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, auraData.expirationTime, modRate, nextCheck)
+              if type(expT) == "number" and not issecretvalue(expT) and type(modRate) == "number" and not issecretvalue(modRate) and modRate ~= 0 then
+                local remaining = (expT - time) / modRate
+                remCheck = triggerInfo.remainingFunc(remaining)
+                nextCheck = calculateNextCheck(triggerInfo.remainingCheck, remaining, expT, modRate, nextCheck)
+              else
+                remCheck = false
+              end
             end
           end
 
           if remCheck then
             tinsert(auraDatas, auraData)
             matchCount = matchCount + 1
-            totalStacks = totalStacks + (auraData.stacks or 0)
+            local st = auraData.stacks
+            if type(st) == "number" and not issecretvalue(st) then
+              totalStacks = totalStacks + st
+            end
             matchedUnits[unit] = true
             matchCountPerUnit[unit] = (matchCountPerUnit[unit] or 0) + 1
             if not unitCounted then
@@ -1802,6 +1879,95 @@ local function SanitizeSecretValue(val, fallback)
   return val
 end
 
+local function IsAnchorRestrictedAuraInstance(unit, auraInstanceID)
+  if not useAnchorRestrictedAuraClassification or not unit or not auraInstanceID then
+    return false
+  end
+  -- Direct call: C_Secrets.ShouldUnitAuraInstanceBeSecret should not error for valid instance IDs from the aura iterator.
+  return ShouldUnitAuraInstanceBeSecret(unit, auraInstanceID) == true
+end
+
+-- Secret name/spellId without anchor restriction is dropped to avoid junk data on opponents.
+-- The local player's own auras are never anchor-flagged that way, but APIs can still redact
+-- name/spellId in restricted combat; we still want those to flow through HandleAura and sanitize.
+local function ShouldDropNonAnchorSecretAura(unit)
+  if not unit then
+    return true
+  end
+  return not UnitIsUnit(unit, "player")
+end
+
+--- Restricted combat can redact auras from the iterator and send removedAuraInstanceIDs (or full resyncs)
+--- when an instance becomes secret, even though the buff is still active. Keep the last match row until
+--- the recorded expiration so triggers do not disappear after ~1s. Early dispel may show stale until then.
+local function ShouldPreservePlayerSecretSpellRow(unit, filter, data)
+  if not newAPI or unit ~= "player" or not data then
+    return false
+  end
+  if not Private.ExecEnv.ShouldAurasBeSecret("player") then
+    return false
+  end
+  local sid = data.spellId
+  if type(sid) ~= "number" or issecretvalue(sid) then
+    return false
+  end
+  if not Private.ExecEnv.ShouldSpellAuraBeSecret(sid) then
+    return false
+  end
+  local exp = data.expirationTime
+  if not exp or exp <= GetTime() then
+    return false
+  end
+  return true
+end
+
+local function MarkMatchDataChangedForPreservedPlayerSecretRows(diff, unit, filter)
+  if not matchData[unit] or not matchData[unit][filter] then
+    return
+  end
+  for _, data in pairs(matchData[unit][filter]) do
+    if ShouldPreservePlayerSecretSpellRow(unit, filter, data) then
+      for id, triggerData in pairs(data.auras) do
+        for triggernum in pairs(triggerData) do
+          diff[id] = diff[id] or {}
+          diff[id][triggernum] = true
+        end
+      end
+    end
+  end
+end
+
+--- Drop held-over rows once expiration has passed (iterator may never send a removal when data is secret).
+local function RemoveExpiredPlayerAuraMatchRows(unit, filter, diff)
+  if not newAPI or unit ~= "player" or not matchData[unit] or not matchData[unit][filter] then
+    return
+  end
+  local now = GetTime()
+  local toRemove = {}
+  for auraInstanceID, data in pairs(matchData[unit][filter]) do
+    local exp = data.expirationTime
+    if exp and exp < math.huge and exp > 0 and exp <= now then
+      toRemove[#toRemove + 1] = auraInstanceID
+    end
+  end
+  for _, auraInstanceID in ipairs(toRemove) do
+    local data = matchData[unit][filter][auraInstanceID]
+    if data then
+      matchData[unit][filter][auraInstanceID] = nil
+      for id, triggerData in pairs(data.auras) do
+        for triggernum in pairs(triggerData) do
+          matchDataByTrigger[id][triggernum][unit][auraInstanceID] = nil
+          diff[id] = diff[id] or {}
+          diff[id][triggernum] = true
+        end
+      end
+      if data.dataInstanceID then
+        TooltipHelper:Untrack(data.dataInstanceID, data)
+      end
+    end
+  end
+end
+
 local PrepareMatchData
 do
   local _time, _unit, _filter
@@ -1814,7 +1980,8 @@ do
     local name = aura.name
     local spellId = aura.spellId
     local icon = aura.icon
-    local isSecret = false
+    local auraInstanceID = aura.auraInstanceID
+    local isAnchorRestricted = IsAnchorRestrictedAuraInstance(_unit, auraInstanceID)
 
     local hasSecretData = issecretvalue(name) or issecretvalue(spellId)
     local dataUnusable = (type(name) ~= "string" and not hasSecretData) or (type(spellId) ~= "number" and not hasSecretData)
@@ -1823,15 +1990,27 @@ do
       return
     end
 
-    if hasSecretData or (aura.auraInstanceID and Private.ExecEnv.ShouldUnitAuraInstanceBeSecret(_unit, aura.auraInstanceID)) then
+    if useAnchorRestrictedAuraClassification and hasSecretData and not isAnchorRestricted and ShouldDropNonAnchorSecretAura(_unit) then
+      return
+    end
+
+    local isSecret = false
+    if isAnchorRestricted then
+      isSecret = true
       if hasSecretData then
         local safeSpellId = (type(spellId) == "number" and not issecretvalue(spellId)) and spellId or 0
         WeakAuras.LogSecretAuraSkip(_unit, aura, safeSpellId > 0)
         name = L["Private Aura"]
         spellId = safeSpellId
         icon = SanitizeSecretValue(aura.icon, 134400)
-        isSecret = true
       end
+    elseif hasSecretData then
+      local safeSpellId = (type(spellId) == "number" and not issecretvalue(spellId)) and spellId or 0
+      WeakAuras.LogSecretAuraSkip(_unit, aura, safeSpellId > 0)
+      name = L["Private Aura"]
+      spellId = safeSpellId
+      icon = SanitizeSecretValue(aura.icon, 134400)
+      isSecret = true
     end
 
     if type(name) ~= "string" then
@@ -1846,14 +2025,56 @@ do
     local isStealable = SanitizeSecretValue(aura.isStealable, false)
     local isBossAura = SanitizeSecretValue(aura.isBossAura, false)
     local isCastByPlayer = SanitizeSecretValue(aura.isFromPlayerOrPlayerPet, nil)
+    if isSecret and spellId == 0 then
+      -- Spell id is hidden: isBossAura can be incorrectly true for non-boss restricted auras.
+      isBossAura = false
+    end
     icon = SanitizeSecretValue(icon, 134400)
     local debuffClass = FixDebuffClass(SanitizeSecretValue(aura.dispelName, nil), spellId)
     local points = SanitizeSecretValue(aura.points, nil)
 
-    UpdateMatchData(_time, matchDataChanged, _unit, nil, aura.auraInstanceID, _filter, name, icon, stacks, debuffClass, duration, expirationTime, sourceUnit, isStealable, isBossAura, isCastByPlayer, spellId, timeMod, points)
+    UpdateMatchData(_time, matchDataChanged, _unit, nil, auraInstanceID, _filter, name, icon, stacks, debuffClass, duration, expirationTime, sourceUnit, isStealable, isBossAura, isCastByPlayer, spellId, timeMod, points)
 
-    if matchData[_unit] and matchData[_unit][_filter] and aura.auraInstanceID and matchData[_unit][_filter][aura.auraInstanceID] then
-      matchData[_unit][_filter][aura.auraInstanceID].isSecretAura = isSecret or false
+    if matchData[_unit] and matchData[_unit][_filter] and auraInstanceID and matchData[_unit][_filter][auraInstanceID] then
+      matchData[_unit][_filter][auraInstanceID].isSecretAura = isSecret or false
+    end
+  end
+
+  --- Iterator can omit player buffs when C_Secrets hides auras; GetPlayerAuraBySpellID often still returns AuraData.
+  local function SupplementPlayerAurasFromGetPlayerAuraBySpellID()
+    if _unit ~= "player" or not C_UnitAuras or not C_UnitAuras.GetPlayerAuraBySpellID then
+      return
+    end
+    local seen = {}
+    local function considerSpellId(spellId)
+      if type(spellId) ~= "number" or seen[spellId] then
+        return
+      end
+      seen[spellId] = true
+      local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, spellId)
+      if not ok or not aura then
+        return
+      end
+      local isHelpful, isHarmful = aura.isHelpful, aura.isHarmful
+      if issecretvalue(isHelpful) then isHelpful = nil end
+      if issecretvalue(isHarmful) then isHarmful = nil end
+      if isHelpful == nil and isHarmful == nil then
+        isHelpful = (_filter == "HELPFUL")
+        isHarmful = (_filter == "HARMFUL")
+      end
+      if (isHelpful and _filter == "HELPFUL") or (isHarmful and _filter == "HARMFUL") then
+        HandleAura(aura)
+      end
+    end
+    if scanFuncSpellId[_unit] and scanFuncSpellId[_unit][_filter] then
+      for spellId in pairs(scanFuncSpellId[_unit][_filter]) do
+        considerSpellId(spellId)
+      end
+    end
+    if scanFuncSpellIdGroup[_unit] and scanFuncSpellIdGroup[_unit][_filter] then
+      for spellId in pairs(scanFuncSpellIdGroup[_unit][_filter]) do
+        considerSpellId(spellId)
+      end
     end
   end
 
@@ -1864,6 +2085,7 @@ do
         _unit = unit
         _filter = filter
         AuraUtil.ForEachAura(unit, filter, nil, HandleAura, true)
+        SupplementPlayerAurasFromGetPlayerAuraBySpellID()
       else
         local time = GetTime()
         local index = 1
@@ -1889,18 +2111,27 @@ local function CleanUpOutdatedMatchData(removeIndex, unit, filter)
   if newAPI then
     -- clean everything, as ScanUnitWithFilter is only used with index = 1 to wipe all data with newAPI
     if matchData[unit] and matchData[unit][filter] then
+      local toRemove = {}
       for auraInstanceID, data in pairs(matchData[unit][filter]) do
-        for id, triggerData in pairs(data.auras) do
-          for triggernum in pairs(triggerData) do
-            matchDataByTrigger[id][triggernum][unit][auraInstanceID] = nil
-            matchDataChanged[id] = matchDataChanged[id] or {}
-            matchDataChanged[id][triggernum] = true
+        if not ShouldPreservePlayerSecretSpellRow(unit, filter, data) then
+          toRemove[#toRemove + 1] = auraInstanceID
+        end
+      end
+      for _, auraInstanceID in ipairs(toRemove) do
+        local data = matchData[unit][filter][auraInstanceID]
+        if data then
+          for id, triggerData in pairs(data.auras) do
+            for triggernum in pairs(triggerData) do
+              matchDataByTrigger[id][triggernum][unit][auraInstanceID] = nil
+              matchDataChanged[id] = matchDataChanged[id] or {}
+              matchDataChanged[id][triggernum] = true
+            end
           end
+          if data.dataInstanceID then
+            TooltipHelper:Untrack(data.dataInstanceID, data)
+          end
+          matchData[unit][filter][auraInstanceID] = nil
         end
-        if data.dataInstanceID then
-          TooltipHelper:Untrack(data.dataInstanceID, data)
-        end
-        matchData[unit][filter][auraInstanceID] = nil
       end
     end
   else
@@ -1975,10 +2206,11 @@ do
       return
     end
 
-    local isSecret = false
     local name = aura.name
     local spellId = aura.spellId
     local icon = aura.icon
+    local auraInstanceID = aura.auraInstanceID
+    local isAnchorRestricted = IsAnchorRestrictedAuraInstance(_unit, auraInstanceID)
 
     local hasSecretData = issecretvalue(name) or issecretvalue(spellId)
     local dataUnusable = (type(name) ~= "string" and not hasSecretData) or (type(spellId) ~= "number" and not hasSecretData)
@@ -1987,15 +2219,27 @@ do
       return
     end
 
-    if hasSecretData or (aura.auraInstanceID and Private.ExecEnv.ShouldUnitAuraInstanceBeSecret(_unit, aura.auraInstanceID)) then
+    if useAnchorRestrictedAuraClassification and hasSecretData and not isAnchorRestricted and ShouldDropNonAnchorSecretAura(_unit) then
+      return
+    end
+
+    local isSecret = false
+    if isAnchorRestricted then
+      isSecret = true
       if hasSecretData then
         local safeSpellId = (type(spellId) == "number" and not issecretvalue(spellId)) and spellId or 0
         WeakAuras.LogSecretAuraSkip(_unit, aura, safeSpellId > 0)
         name = L["Private Aura"]
         spellId = safeSpellId
         icon = SanitizeSecretValue(aura.icon, 134400)
-        isSecret = true
       end
+    elseif hasSecretData then
+      local safeSpellId = (type(spellId) == "number" and not issecretvalue(spellId)) and spellId or 0
+      WeakAuras.LogSecretAuraSkip(_unit, aura, safeSpellId > 0)
+      name = L["Private Aura"]
+      spellId = safeSpellId
+      icon = SanitizeSecretValue(aura.icon, 134400)
+      isSecret = true
     end
 
     if type(name) ~= "string" then
@@ -2010,11 +2254,13 @@ do
     local isStealable = SanitizeSecretValue(aura.isStealable, false)
     local isBossAura = SanitizeSecretValue(aura.isBossAura, false)
     local isCastByPlayer = SanitizeSecretValue(aura.isFromPlayerOrPlayerPet, nil)
+    if isSecret and spellId == 0 then
+      isBossAura = false
+    end
     icon = SanitizeSecretValue(icon, 134400)
     local debuffClass = FixDebuffClass(SanitizeSecretValue(aura.dispelName, nil), spellId)
     local points = SanitizeSecretValue(aura.points, nil)
 
-    local auraInstanceID = aura.auraInstanceID
     local updatedMatchData = UpdateMatchData(_time, _matchDataChanged, _unit, nil, auraInstanceID, _filter, name, icon, stacks, debuffClass, duration, expirationTime, sourceUnit, isStealable, isBossAura, isCastByPlayer, spellId, timeMod, points)
 
     if matchData[_unit] and matchData[_unit][_filter] and matchData[_unit][_filter][auraInstanceID] then
@@ -2022,12 +2268,49 @@ do
     end
 
     if updatedMatchData then
-      CheckScanFuncs(_scanFuncName and _scanFuncName[name], _unit, _filter, auraInstanceID)
-      CheckScanFuncs(_scanFuncNameGroup and _scanFuncNameGroup[name], _unit, _filter, auraInstanceID)
-      CheckScanFuncs(_scanFuncSpellId and _scanFuncSpellId[spellId], _unit, _filter, auraInstanceID)
-      CheckScanFuncs(_scanFuncSpellIdGroup and _scanFuncSpellIdGroup[spellId], _unit, _filter, auraInstanceID)
-      CheckScanFuncs(_scanFuncGeneral, _unit, _filter, auraInstanceID)
-      CheckScanFuncs(_scanFuncGeneralGroup, _unit, _filter, auraInstanceID)
+      CheckScanFuncs(_scanFuncName and _scanFuncName[name], _unit, _filter, auraInstanceID, _time)
+      CheckScanFuncs(_scanFuncNameGroup and _scanFuncNameGroup[name], _unit, _filter, auraInstanceID, _time)
+      CheckScanFuncs(_scanFuncSpellId and _scanFuncSpellId[spellId], _unit, _filter, auraInstanceID, _time)
+      CheckScanFuncs(_scanFuncSpellIdGroup and _scanFuncSpellIdGroup[spellId], _unit, _filter, auraInstanceID, _time)
+      CheckScanFuncs(_scanFuncGeneral, _unit, _filter, auraInstanceID, _time)
+      CheckScanFuncs(_scanFuncGeneralGroup, _unit, _filter, auraInstanceID, _time)
+    end
+  end
+
+  local function SupplementScanUnitPlayerAurasFromGetPlayerAuraBySpellID()
+    if _unit ~= "player" or not C_UnitAuras or not C_UnitAuras.GetPlayerAuraBySpellID then
+      return
+    end
+    local seen = {}
+    local function considerSpellId(spellId)
+      if type(spellId) ~= "number" or seen[spellId] then
+        return
+      end
+      seen[spellId] = true
+      local ok, aura = pcall(C_UnitAuras.GetPlayerAuraBySpellID, spellId)
+      if not ok or not aura then
+        return
+      end
+      local isHelpful, isHarmful = aura.isHelpful, aura.isHarmful
+      if issecretvalue(isHelpful) then isHelpful = nil end
+      if issecretvalue(isHarmful) then isHarmful = nil end
+      if isHelpful == nil and isHarmful == nil then
+        isHelpful = (_filter == "HELPFUL")
+        isHarmful = (_filter == "HARMFUL")
+      end
+      if (isHelpful and _filter == "HELPFUL") or (isHarmful and _filter == "HARMFUL") then
+        HandleAura(aura)
+      end
+    end
+    if _scanFuncSpellId then
+      for spellId in pairs(_scanFuncSpellId) do
+        considerSpellId(spellId)
+      end
+    end
+    if _scanFuncSpellIdGroup then
+      for spellId in pairs(_scanFuncSpellIdGroup) do
+        considerSpellId(spellId)
+      end
     end
   end
 
@@ -2046,6 +2329,7 @@ do
       if newAPI then
         -- copy parameters passed to ScanUnitWithFilter in parent's scope for HandleAura
         _matchDataChanged, _time, _unit, _filter, _scanFuncNameGroup, _scanFuncSpellIdGroup, _scanFuncGeneralGroup, _scanFuncName, _scanFuncSpellId, _scanFuncGeneral = matchDataChanged, time, unit, filter, scanFuncNameGroup, scanFuncSpellIdGroup, scanFuncGeneralGroup, scanFuncName, scanFuncSpellId, scanFuncGeneral
+        RemoveExpiredPlayerAuraMatchRows(unit, filter, matchDataChanged)
         if unitAuraUpdateInfo then
           -- incremental
           if unitAuraUpdateInfo.addedAuras ~= nil then
@@ -2098,7 +2382,7 @@ do
             for _, auraInstanceID in ipairs(unitAuraUpdateInfo.removedAuraInstanceIDs) do
               if matchData[unit] and matchData[unit][filter] then
                 local data = matchData[unit][filter][auraInstanceID]
-                if data then
+                if data and not ShouldPreservePlayerSecretSpellRow(unit, filter, data) then
                   matchData[unit][filter][auraInstanceID] = nil
                   for id, triggerData in pairs(data.auras) do
                     for triggernum in pairs(triggerData) do
@@ -2114,11 +2398,15 @@ do
               end
             end
           end
+          SupplementScanUnitPlayerAurasFromGetPlayerAuraBySpellID()
+          MarkMatchDataChangedForPreservedPlayerSecretRows(matchDataChanged, unit, filter)
         else
           -- full
           -- clean first
           CleanUpOutdatedMatchData(nil, unit, filter)
           AuraUtil.ForEachAura(unit, filter, nil, HandleAura, true)
+          SupplementScanUnitPlayerAurasFromGetPlayerAuraBySpellID()
+          MarkMatchDataChangedForPreservedPlayerSecretRows(matchDataChanged, unit, filter)
         end
       else
         local index = 1
@@ -2133,12 +2421,12 @@ do
           local updatedMatchData = UpdateMatchData(time, matchDataChanged, unit, index, nil, filter, name, icon, stacks, debuffClass, duration, expirationTime, unitCaster, isStealable, isBossDebuff, isCastByPlayer, spellId, modRate, nil)
 
           if updatedMatchData then -- Aura data changed, check against triggerInfos
-            CheckScanFuncs(scanFuncName and scanFuncName[name], unit, filter, index)
-            CheckScanFuncs(scanFuncNameGroup and scanFuncNameGroup[name], unit, filter, index)
-            CheckScanFuncs(scanFuncSpellId and scanFuncSpellId[spellId], unit, filter, index)
-            CheckScanFuncs(scanFuncSpellIdGroup and scanFuncSpellIdGroup[spellId], unit, filter, index)
-            CheckScanFuncs(scanFuncGeneral, unit, filter, index)
-            CheckScanFuncs(scanFuncGeneralGroup, unit, filter, index)
+            CheckScanFuncs(scanFuncName and scanFuncName[name], unit, filter, index, time)
+            CheckScanFuncs(scanFuncNameGroup and scanFuncNameGroup[name], unit, filter, index, time)
+            CheckScanFuncs(scanFuncSpellId and scanFuncSpellId[spellId], unit, filter, index, time)
+            CheckScanFuncs(scanFuncSpellIdGroup and scanFuncSpellIdGroup[spellId], unit, filter, index, time)
+            CheckScanFuncs(scanFuncGeneral, unit, filter, index, time)
+            CheckScanFuncs(scanFuncGeneralGroup, unit, filter, index, time)
           end
           index = index + 1
         end
@@ -2272,12 +2560,17 @@ local function AddScanFuncs(triggerInfo, filter, unit, scanFuncName, scanFuncSpe
     end
   end
 
-  if not triggerInfo.auranames and not triggerInfo.auraspellids and scanFuncGeneral then
+  if triggerInfo.auranames == nil and triggerInfo.auraspellids == nil and scanFuncGeneral then
     local base = GetOrCreateSubTable(scanFuncGeneral, unit, filter)
     base[triggerInfo] = true
   end
 
   if unit then
+    -- Rebuild player match rows so GetPlayerAuraBySpellID supplement runs for newly watched spell IDs.
+    if newAPI and unit == "player" and type(triggerInfo.auraspellids) == "table" and next(triggerInfo.auraspellids) then
+      matchDataUpToDate[unit] = matchDataUpToDate[unit] or {}
+      matchDataUpToDate[unit][filter] = nil
+    end
     PrepareMatchData(unit, filter)
     ScanMatchData(GetTime(), triggerInfo, unit, filter)
   end
@@ -2304,7 +2597,7 @@ local function RemoveScanFuncs(triggerInfo, filter, unit, scanFuncName, scanFunc
     end
   end
 
-  if not triggerInfo.auranames and not triggerInfo.auraspellids and scanFuncGeneral then
+  if triggerInfo.auranames == nil and triggerInfo.auraspellids == nil and scanFuncGeneral then
     local base = GetSubTable(scanFuncGeneral, unit, filter)
     if base then
       base[triggerInfo] = nil
@@ -2987,7 +3280,12 @@ local function createScanFunc(trigger)
 
   if use_total then
     local ret2 = [=[
-      if not(matchData.duration / matchData.modRate %s %s) then
+      local __d, __m = matchData.duration, matchData.modRate
+      if issecretvalue(__d) or issecretvalue(__m) then
+        return false
+      end
+      local __mr = (__m and __m ~= 0) and __m or 1
+      if not((__d / __mr) %s %s) then
         return false
       end
     ]=]
@@ -2996,7 +3294,11 @@ local function createScanFunc(trigger)
 
   if useStacks then
     local ret2 = [=[
-      if not(matchData.stacks %s %s) then
+      local __s = matchData.stacks
+      if issecretvalue(__s) then
+        return false
+      end
+      if not(__s %s %s) then
         return false
       end
     ]=]
@@ -3097,11 +3399,12 @@ local function createScanFunc(trigger)
   if use_tooltipValue and trigger.tooltipValueNumber and trigger.tooltipValue_operator and trigger.tooltipValue then
     local property = "tooltip" .. tonumber(trigger.tooltipValueNumber)
     local ret2 = [=[
-      if not matchData.%s or not (matchData.%s %s %s) then
+      local __tv = matchData.%s
+      if not __tv or issecretvalue(__tv) or not (__tv %s %s) then
         return false
       end
     ]=]
-    table.insert(ret, ret2:format(property, property, trigger.tooltipValue_operator, trigger.tooltipValue))
+    table.insert(ret, ret2:format(property, trigger.tooltipValue_operator, trigger.tooltipValue))
   end
 
   if trigger.useNamePattern and trigger.namePattern_operator and trigger.namePattern_name then
@@ -3179,26 +3482,30 @@ end
 
 local matchCombineFunctions = {
   showHighest = function(bestMatch, auraMatch)
-    if bestMatch.expirationTime and auraMatch.expirationTime then
-      return auraMatch.expirationTime > bestMatch.expirationTime
+    local e1, e2 = bestMatch.expirationTime, auraMatch.expirationTime
+    if type(e1) == "number" and not issecretvalue(e1) and type(e2) == "number" and not issecretvalue(e2) then
+      return e2 > e1
     end
     return true
   end,
   showLowest = function(bestMatch, auraMatch)
-    if bestMatch.expirationTime and auraMatch.expirationTime then
-      return auraMatch.expirationTime < bestMatch.expirationTime
+    local e1, e2 = bestMatch.expirationTime, auraMatch.expirationTime
+    if type(e1) == "number" and not issecretvalue(e1) and type(e2) == "number" and not issecretvalue(e2) then
+      return e2 < e1
     end
     return false
   end,
   showLowestSpellId  = function(bestMatch, auraMatch)
-    if bestMatch.spellId and auraMatch.spellId then
-      return auraMatch.spellId < bestMatch.spellId
+    local s1, s2 = bestMatch.spellId, auraMatch.spellId
+    if type(s1) == "number" and not issecretvalue(s1) and type(s2) == "number" and not issecretvalue(s2) then
+      return s2 < s1
     end
     return false
   end,
   showHighestSpellId  = function(bestMatch, auraMatch)
-    if bestMatch.spellId and auraMatch.spellId then
-      return auraMatch.spellId > bestMatch.spellId
+    local s1, s2 = bestMatch.spellId, auraMatch.spellId
+    if type(s1) == "number" and not issecretvalue(s1) and type(s2) == "number" and not issecretvalue(s2) then
+      return s2 > s1
     end
     return false
   end,
@@ -3288,9 +3595,16 @@ function BuffTrigger.Add(data)
       if trigger.useName and trigger.auranames then
         names = {}
         for index, spellName in ipairs(trigger.auranames) do
-          local spellId = WeakAuras.SafeToNumber(spellName)
-          names[index] = spellId and Private.ExecEnv.GetSpellName(spellId) or spellName
+          if spellName ~= "" then
+            local spellId = WeakAuras.SafeToNumber(spellName)
+            names[#names + 1] = spellId and Private.ExecEnv.GetSpellName(spellId) or spellName
+          end
         end
+        if not next(names) then
+          names = false
+        end
+      elseif trigger.useName then
+        names = false
       end
 
       local showIfInvalidUnit
@@ -3368,6 +3682,11 @@ function BuffTrigger.Add(data)
               tinsert(auraspellids, spellId)
             end
           end
+        end
+      end
+      if trigger.useExactSpellId then
+        if not auraspellids or not next(auraspellids) then
+          auraspellids = false
         end
       end
 

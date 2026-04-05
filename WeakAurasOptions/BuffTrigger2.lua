@@ -738,7 +738,7 @@ local function GetBuffTriggerOptions(data, triggernum)
     secretAuraMode = {
       type = "select",
       name = L["Restricted Aura Handling"],
-      desc = L["Controls how restricted (private) auras are handled inside instanced content where Blizzard hides aura names and spell IDs.\n\n|cFFFFFFFFNormal|r\nDefault behavior. Restricted auras are shown as 'Private Aura' alongside normal auras.\n\n|cFFFFFFFFRestricted Only|r\nOnly show auras that are restricted. Filters out all normal (non-restricted) auras.\n\n|cFFFFFFFFAll + Restricted|r\nSame as Normal. Show all auras including restricted ones."],
+      desc = L["Controls how restricted (private) auras are handled on Retail for auras Blizzard classifies as instance-restricted (boss-style private debuffs, the same class as private aura anchor slots). Other auras that only hide name or spell ID on the summary API are ignored.\n\n|cFFFFFFFFNormal|r\nRestricted instances can appear as 'Private Aura' alongside normal auras.\n\n|cFFFFFFFFRestricted Only|r\nOnly match those instance-restricted auras. Filters out all normal (non-restricted) auras.\n\n|cFFFFFFFFAll + Restricted|r\nSame as Normal."],
       order = 64.4,
       width = WeakAuras.doubleWidth,
       values = {
